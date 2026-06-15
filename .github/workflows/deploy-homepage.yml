@@ -1,0 +1,371 @@
+name: Deploy Homepage
+
+on:
+  workflow_dispatch:
+    inputs:
+      site:
+        description: Homepage site to build or deploy
+        required: true
+        type: choice
+        options:
+          - aspose.com
+          - aspose.cloud
+          - aspose.app
+          - aspose.ai
+          - aspose.net
+          - aspose.org
+          - groupdocs.com
+          - groupdocs.cloud
+          - groupdocs.app
+          - conholdate.com
+          - conholdate.cloud
+          - conholdate.app
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - qa
+          - production
+      ref:
+        description: Branch, tag, or SHA in conholdate/homepages
+        required: true
+        default: main
+      deploy:
+        description: Deploy after build
+        required: true
+        type: boolean
+        default: false
+      invalidate_cache:
+        description: Invalidate CloudFront or BunnyCDN after deploy
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homepage-${{ inputs.site }}-${{ inputs.environment }}-${{ inputs.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-deploy:
+    name: ${{ inputs.site }} / ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout homepages source
+        uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages
+          ref: ${{ inputs.ref }}
+          token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Resolve site deployment map
+        id: map
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          site="${{ inputs.site }}"
+          environment="${{ inputs.environment }}"
+
+          case "${site}:${environment}" in
+            aspose.com:qa)
+              config="config/config-stage-aspose-com.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.com:production)
+              config="config/config-aspose-com.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.cloud:qa)
+              config="config/config-stage-aspose-cloud.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.cloud:production)
+              config="config/config-aspose-cloud.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_CLOUD_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.app:qa)
+              config="config/config-stage-aspose-app.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_APP_QA_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.app:production)
+              config="config/config-aspose-app.toml"
+              targets="Production,Production-www"
+              credential_set="sl"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.ai:qa)
+              config="config/config-stage-aspose-ai.toml"
+              targets="Staging"
+              credential_set="homepages"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.ai:production)
+              config="config/config-aspose-ai.toml"
+              targets="Production"
+              credential_set="homepages"
+              cache_kind="cloudfront"
+              cache_variable="ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
+              ;;
+            aspose.net:qa)
+              config="config/config-stage-aspose-net.toml"
+              targets="staging_ceph"
+              credential_set="ceph_qa"
+              cache_kind="bunny"
+              cache_url="https://qa.aspose.net/*"
+              ;;
+            aspose.net:production)
+              config="config/config-aspose-net.toml"
+              targets="production_ceph"
+              credential_set="ceph_production"
+              cache_kind="bunny"
+              cache_url="https://www.aspose.net/*"
+              ;;
+            aspose.org:qa)
+              config="config/config-stage-aspose-org.toml"
+              targets="staging_ceph"
+              credential_set="ceph_qa"
+              cache_kind="bunny"
+              cache_url="https://qa.aspose.org/*"
+              ;;
+            aspose.org:production)
+              config="config/config-aspose-org.toml"
+              targets="production_ceph"
+              credential_set="ceph_production"
+              cache_kind="bunny"
+              cache_url="https://www.aspose.org/*"
+              ;;
+            groupdocs.com:qa)
+              config="config/config-stage-groupdocs-com.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            groupdocs.com:production)
+              config="config/config-groupdocs-com.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            groupdocs.cloud:qa)
+              config="config/config-stage-groupdocs-cloud.toml"
+              targets="Stage"
+              credential_set="standard"
+              cache_kind="none"
+              ;;
+            groupdocs.cloud:production)
+              config="config/config-groupdocs-cloud.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            groupdocs.app:qa)
+              config="config/config-stage-groupdocs-app.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            groupdocs.app:production)
+              config="config/config-groupdocs-app.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            conholdate.com:qa)
+              config="config/config-stage-conholdate-com.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            conholdate.com:production)
+              config="config/config-conholdate-com.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            conholdate.cloud:qa)
+              config="config/config-stage-conholdate-cloud.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            conholdate.cloud:production)
+              config="config/config-conholdate-cloud.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            conholdate.app:qa)
+              config="config/config-stage-conholdate-app.toml"
+              targets="Stage"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            conholdate.app:production)
+              config="config/config-conholdate-app.toml"
+              targets="Production"
+              credential_set="sl"
+              cache_kind="none"
+              ;;
+            *)
+              echo "::error::Unsupported site/environment: ${site}/${environment}"
+              exit 1
+              ;;
+          esac
+
+          if [ ! -f "$config" ]; then
+            echo "::error::Config not found in conholdate/homepages: $config"
+            exit 1
+          fi
+
+          {
+            echo "config=$config"
+            echo "targets=$targets"
+            echo "credential_set=$credential_set"
+            echo "cache_kind=$cache_kind"
+            echo "cache_variable=${cache_variable:-}"
+            echo "cache_url=${cache_url:-}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Setup Hugo
+        env:
+          HUGO_VERSION: 0.162.0
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/hugo.tar.gz "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz"
+          tar -xzf /tmp/hugo.tar.gz -C /tmp hugo
+          sudo mv /tmp/hugo /usr/local/bin/hugo
+          hugo version
+
+      - name: Build
+        run: hugo --config "${{ steps.map.outputs.config }}" --minify
+
+      - name: Deploy
+        if: ${{ inputs.deploy }}
+        shell: bash
+        env:
+          CREDENTIAL_SET: ${{ steps.map.outputs.credential_set }}
+          TARGETS: ${{ steps.map.outputs.targets }}
+          ACCESS_KEY_SL: ${{ secrets.ACCESS_KEY_SL }}
+          SECRET_ACCESS_SL: ${{ secrets.SECRET_ACCESS_SL }}
+          ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
+          SECRET_ACCESS: ${{ secrets.SECRET_ACCESS }}
+          HOMEPAGES_ACCESS_KEY: ${{ secrets.HOMEPAGES_ACCESS_KEY }}
+          HOMEPAGES_SECRET_ACCESS: ${{ secrets.HOMEPAGES_SECRET_ACCESS }}
+          CEPH_QA_ACCESS_KEY_ID: ${{ secrets.CEPH_QA_ACCESS_KEY_ID }}
+          CEPH_QA_SECRET_ACCESS_KEY: ${{ secrets.CEPH_QA_SECRET_ACCESS_KEY }}
+          CEPH_PRODUCTION_ACCESS_KEY_ID: ${{ secrets.CEPH_PRODUCTION_ACCESS_KEY_ID }}
+          CEPH_PRODUCTION_SECRET_ACCESS_KEY: ${{ secrets.CEPH_PRODUCTION_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+
+          case "$CREDENTIAL_SET" in
+            sl)
+              export AWS_ACCESS_KEY_ID="$ACCESS_KEY_SL"
+              export AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS_SL"
+              ;;
+            standard)
+              export AWS_ACCESS_KEY_ID="$ACCESS_KEY"
+              export AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS"
+              ;;
+            homepages)
+              export AWS_ACCESS_KEY_ID="$HOMEPAGES_ACCESS_KEY"
+              export AWS_SECRET_ACCESS_KEY="$HOMEPAGES_SECRET_ACCESS"
+              ;;
+            ceph_qa)
+              export AWS_ACCESS_KEY_ID="$CEPH_QA_ACCESS_KEY_ID"
+              export AWS_SECRET_ACCESS_KEY="$CEPH_QA_SECRET_ACCESS_KEY"
+              ;;
+            ceph_production)
+              export AWS_ACCESS_KEY_ID="$CEPH_PRODUCTION_ACCESS_KEY_ID"
+              export AWS_SECRET_ACCESS_KEY="$CEPH_PRODUCTION_SECRET_ACCESS_KEY"
+              ;;
+            *)
+              echo "::error::Unsupported credential set."
+              exit 1
+              ;;
+          esac
+
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::Missing deploy credentials for credential set: $CREDENTIAL_SET"
+            exit 1
+          fi
+
+          IFS=',' read -ra target_array <<< "$TARGETS"
+          for target in "${target_array[@]}"; do
+            hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes -1 --force
+          done
+
+      - name: Invalidate CloudFront
+        if: ${{ inputs.deploy && inputs.invalidate_cache && steps.map.outputs.cache_kind == 'cloudfront' }}
+        shell: bash
+        env:
+          CACHE_VARIABLE: ${{ steps.map.outputs.cache_variable }}
+          ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_CLOUD_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_CLOUD_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_APP_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_APP_QA_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID }}
+          ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.HOMEPAGES_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.HOMEPAGES_SECRET_ACCESS }}
+          AWS_DEFAULT_REGION: us-east-1
+        run: |
+          set -euo pipefail
+          distribution_id="${!CACHE_VARIABLE:-}"
+          if [ -z "$distribution_id" ]; then
+            echo "::error::Missing CloudFront repository variable: $CACHE_VARIABLE"
+            exit 1
+          fi
+          if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+            echo "::error::Missing CloudFront invalidation credentials."
+            exit 1
+          fi
+          aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths "/*"
+
+      - name: Purge BunnyCDN
+        if: ${{ inputs.deploy && inputs.invalidate_cache && steps.map.outputs.cache_kind == 'bunny' }}
+        shell: bash
+        env:
+          BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
+          CACHE_URL: ${{ steps.map.outputs.cache_url }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BUNNY_API_KEY:-}" ]; then
+            echo "::error::Missing BUNNY_API_KEY."
+            exit 1
+          fi
+          if [ -z "${CACHE_URL:-}" ]; then
+            echo "::error::Missing Bunny purge URL mapping."
+            exit 1
+          fi
+          curl -fsS -G \
+            -H "X-Api-Key: ${BUNNY_API_KEY}" \
+            --data-urlencode "url=${CACHE_URL}" \
+            "https://api.dynabic.com/bn/purge?async=true" >/dev/null
