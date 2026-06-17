@@ -1,0 +1,116 @@
+name: Homepages Agent PR Autopilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number in conholdate/homepages-agent
+        required: true
+      agent_ref:
+        description: Branch, tag, or SHA in conholdate/homepages-agent to run the agent from
+        required: true
+      apply:
+        description: Merge when every gate approves
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homepages-agent-pr-autopilot-${{ inputs.pr_number }}
+  cancel-in-progress: false
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve pull request head
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          echo "sha=$(gh api "/repos/conholdate/homepages-agent/pulls/${PR_NUMBER}" --jq '.head.sha')" >> "$GITHUB_OUTPUT"
+
+      - name: Mark autopilot pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/conholdate/homepages-agent/statuses/${SHA}" \
+            -f state=pending \
+            -f context="Homepages Agent PR Autopilot" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central PR autopilot running"
+
+      - name: Checkout homepages-agent
+        uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages-agent
+          ref: ${{ inputs.agent_ref }}
+          token: ${{ secrets.AGENT_REPO_PAT }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: python -m pip install -e . playwright
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Run PR autopilot
+        shell: bash
+        env:
+          GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          args=(
+            -m homepages_agent
+            pr-autopilot
+            --repository conholdate/homepages-agent
+            --number "${PR_NUMBER}"
+            --poll-interval 15
+            --timeout 600
+            --json
+          )
+          if [ "${APPLY}" = "true" ]; then
+            args+=(--apply)
+          fi
+          python "${args[@]}"
+
+      - name: Mark autopilot success
+        if: ${{ success() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/conholdate/homepages-agent/statuses/${SHA}" \
+            -f state=success \
+            -f context="Homepages Agent PR Autopilot" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central PR autopilot passed"
+
+      - name: Mark autopilot failure
+        if: ${{ failure() && steps.pr.outputs.sha != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/conholdate/homepages-agent/statuses/${SHA}" \
+            -f state=failure \
+            -f context="Homepages Agent PR Autopilot" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central PR autopilot failed"
