@@ -1,0 +1,95 @@
+name: Homepages Agent CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      agent_ref:
+        description: Branch, tag, or SHA in conholdate/homepages-agent
+        required: true
+      pr_number:
+        description: Optional homepages-agent pull request number
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homepages-agent-ci-${{ inputs.agent_ref }}
+  cancel-in-progress: false
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout homepages-agent
+        uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages-agent
+          ref: ${{ inputs.agent_ref }}
+          token: ${{ secrets.AGENT_REPO_PAT }}
+          fetch-depth: 0
+
+      - name: Resolve checked out SHA
+        id: agent
+        shell: bash
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Mark CI pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          SHA: ${{ steps.agent.outputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/conholdate/homepages-agent/statuses/${SHA}" \
+            -f state=pending \
+            -f context="Homepages Agent CI" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central CI running in homepages-workflows"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: python -m pip install -e . playwright
+
+      - name: Install Playwright Chromium
+        run: python -m playwright install --with-deps chromium
+
+      - name: Compile
+        run: python -m compileall src tests
+
+      - name: Unit tests
+        env:
+          PYTHONPATH: src
+        run: python -m unittest discover -s tests
+
+      - name: Mark CI success
+        if: ${{ success() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          SHA: ${{ steps.agent.outputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/conholdate/homepages-agent/statuses/${SHA}" \
+            -f state=success \
+            -f context="Homepages Agent CI" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central CI passed"
+
+      - name: Mark CI failure
+        if: ${{ failure() && steps.agent.outputs.sha != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.AGENT_REPO_PAT }}
+          SHA: ${{ steps.agent.outputs.sha }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/conholdate/homepages-agent/statuses/${SHA}" \
+            -f state=failure \
+            -f context="Homepages Agent CI" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central CI failed"
