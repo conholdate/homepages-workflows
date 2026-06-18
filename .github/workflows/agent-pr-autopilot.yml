@@ -70,6 +70,8 @@ jobs:
         shell: bash
         env:
           GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
+          PROFESSIONALIZE_API_SERVICE_KEY: ${{ secrets.PROFESSIONALIZE_API_SERVICE_KEY }}
+          PROFESSIONALIZE_BASE_URL: ${{ secrets.PROFESSIONALIZE_BASE_URL }}
           PR_NUMBER: ${{ inputs.pr_number }}
           APPLY: ${{ inputs.apply }}
         run: |
