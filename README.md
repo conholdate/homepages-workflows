@@ -36,6 +36,19 @@ invalidate_cache=false
 - Do not echo secrets, credentials, tokens, or signed URLs in workflow steps.
 - Add production environment reviewers before using production deployment.
 
+## Guarded PR Autopilot
+
+Use **Homepages Agent PR Autopilot** for `conholdate/homepages-agent` PRs and
+**Homepages Theme PR Autopilot** for shared-theme PRs in
+`conholdate/homepages`.
+
+Both wrappers call the same reusable guarded workflow. The only differences are
+the target repository, commit-status context, and encrypted PAT secret binding.
+The agent still enforces semantic review approval, required co-author trailers,
+the pinned PR head SHA, and the repository-specific merge policy.
+The homepages wrapper uses the encrypted `HOMEPAGES_REPOS_PAT` secret; the agent
+wrapper continues to use `AGENT_REPO_PAT`.
+
 ## Required Secrets
 
 See `docs/required-secrets-and-variables.md`. The file documents names only,
