@@ -9,6 +9,13 @@ Source checkout:
 
 - `HOMEPAGES_SOURCE_PAT`
 
+Guarded PR automation:
+
+- `AGENT_REPO_PAT`
+- `HOMEPAGES_REPOS_PAT`
+- `PROFESSIONALIZE_API_SERVICE_KEY`
+- `PROFESSIONALIZE_BASE_URL`
+
 S3-style deploy credentials:
 
 - `ACCESS_KEY_SL`

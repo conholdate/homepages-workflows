@@ -1,0 +1,136 @@
+name: Guarded PR Autopilot
+
+on:
+  workflow_call:
+    inputs:
+      target_repository:
+        description: Repository to review and optionally merge, in owner/name form
+        required: true
+        type: string
+      pr_number:
+        description: Pull request number in the target repository
+        required: true
+        type: string
+      agent_ref:
+        description: Branch, tag, or SHA in conholdate/homepages-agent to run the agent from
+        required: true
+        type: string
+      apply:
+        description: Merge when every gate approves
+        required: false
+        default: false
+        type: boolean
+      status_context:
+        description: Commit status context to post on the target PR head
+        required: true
+        type: string
+    secrets:
+      repo_pat:
+        required: true
+      professionalize_api_service_key:
+        required: true
+      professionalize_base_url:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  autopilot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve pull request head
+        id: pr
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.repo_pat }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+        run: |
+          echo "sha=$(gh api "/repos/${TARGET_REPOSITORY}/pulls/${PR_NUMBER}" --jq '.head.sha')" >> "$GITHUB_OUTPUT"
+
+      - name: Mark autopilot pending
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.repo_pat }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          STATUS_CONTEXT: ${{ inputs.status_context }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/${TARGET_REPOSITORY}/statuses/${SHA}" \
+            -f state=pending \
+            -f context="${STATUS_CONTEXT}" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central PR autopilot running"
+
+      - name: Checkout homepages-agent
+        uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages-agent
+          ref: ${{ inputs.agent_ref }}
+          token: ${{ secrets.repo_pat }}
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: python -m pip install -e . playwright
+
+      - name: Run PR autopilot
+        shell: bash
+        env:
+          GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.repo_pat }}
+          PROFESSIONALIZE_API_SERVICE_KEY: ${{ secrets.professionalize_api_service_key }}
+          PROFESSIONALIZE_BASE_URL: ${{ secrets.professionalize_base_url }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          APPLY: ${{ inputs.apply }}
+        run: |
+          args=(
+            -m homepages_agent
+            pr-autopilot
+            --repository "${TARGET_REPOSITORY}"
+            --number "${PR_NUMBER}"
+            --poll-interval 15
+            --timeout 600
+            --json
+          )
+          if [ "${APPLY}" = "true" ]; then
+            args+=(--apply)
+          fi
+          python "${args[@]}"
+
+      - name: Mark autopilot success
+        if: ${{ success() }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.repo_pat }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          STATUS_CONTEXT: ${{ inputs.status_context }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/${TARGET_REPOSITORY}/statuses/${SHA}" \
+            -f state=success \
+            -f context="${STATUS_CONTEXT}" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central PR autopilot passed"
+
+      - name: Mark autopilot failure
+        if: ${{ failure() && steps.pr.outputs.sha != '' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.repo_pat }}
+          TARGET_REPOSITORY: ${{ inputs.target_repository }}
+          SHA: ${{ steps.pr.outputs.sha }}
+          STATUS_CONTEXT: ${{ inputs.status_context }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          gh api -X POST "/repos/${TARGET_REPOSITORY}/statuses/${SHA}" \
+            -f state=failure \
+            -f context="${STATUS_CONTEXT}" \
+            -f target_url="${TARGET_URL}" \
+            -f description="Central PR autopilot failed"

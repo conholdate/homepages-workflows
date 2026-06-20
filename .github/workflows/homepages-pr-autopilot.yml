@@ -1,10 +1,10 @@
-name: Homepages Agent PR Autopilot
+name: Homepages Theme PR Autopilot
 
 on:
   workflow_dispatch:
     inputs:
       pr_number:
-        description: Pull request number in conholdate/homepages-agent
+        description: Pull request number in conholdate/homepages
         required: true
       agent_ref:
         description: Branch, tag, or SHA in conholdate/homepages-agent to run the agent from
@@ -19,19 +19,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: homepages-agent-pr-autopilot-${{ inputs.pr_number }}
+  group: homepages-theme-pr-autopilot-${{ inputs.pr_number }}
   cancel-in-progress: false
 
 jobs:
   autopilot:
     uses: ./.github/workflows/guarded-pr-autopilot.yml
     with:
-      target_repository: conholdate/homepages-agent
+      target_repository: conholdate/homepages
       pr_number: ${{ inputs.pr_number }}
       agent_ref: ${{ inputs.agent_ref }}
       apply: ${{ inputs.apply }}
-      status_context: Homepages Agent PR Autopilot
+      status_context: Homepages Theme PR Autopilot
     secrets:
-      repo_pat: ${{ secrets.AGENT_REPO_PAT }}
+      repo_pat: ${{ secrets.HOMEPAGES_REPOS_PAT }}
       professionalize_api_service_key: ${{ secrets.PROFESSIONALIZE_API_SERVICE_KEY }}
       professionalize_base_url: ${{ secrets.PROFESSIONALIZE_BASE_URL }}
