@@ -299,10 +299,12 @@ jobs:
             ceph_qa)
               export AWS_ACCESS_KEY_ID="$CEPH_QA_ACCESS_KEY_ID"
               export AWS_SECRET_ACCESS_KEY="$CEPH_QA_SECRET_ACCESS_KEY"
+              export AWS_REQUEST_CHECKSUM_CALCULATION="when_required"
               ;;
             ceph_production)
               export AWS_ACCESS_KEY_ID="$CEPH_PRODUCTION_ACCESS_KEY_ID"
               export AWS_SECRET_ACCESS_KEY="$CEPH_PRODUCTION_SECRET_ACCESS_KEY"
+              export AWS_REQUEST_CHECKSUM_CALCULATION="when_required"
               ;;
             *)
               echo "::error::Unsupported credential set."
