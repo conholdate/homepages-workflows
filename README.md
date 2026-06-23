@@ -16,7 +16,9 @@ Inputs:
 - `environment`: `qa` or `production`
 - `ref`: branch, tag, or commit SHA from `conholdate/homepages`
 - `deploy`: set `false` for build-only verification
-- `invalidate_cache`: set `true` to purge CloudFront or BunnyCDN where mapped
+- `invalidate_cache`: set `true` to purge CloudFront or BunnyCDN where mapped.
+  BunnyCDN purge failures are warning-only for QA because the deploy has already
+  written Ceph origin content; production purge failures still fail the workflow.
 
 Default safe test:
 

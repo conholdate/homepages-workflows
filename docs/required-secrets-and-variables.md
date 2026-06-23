@@ -36,6 +36,10 @@ CDN purge:
 
 - `BUNNY_API_KEY`
 
+For QA BunnyCDN sites such as `aspose.net` and `aspose.org`, purge failures are
+reported as workflow warnings after the Ceph deploy completes. Production Bunny
+purge failures remain blocking.
+
 ## Repository Variables
 
 CloudFront distribution IDs are not secret, but they are kept as variables so

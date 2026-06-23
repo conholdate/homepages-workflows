@@ -357,17 +357,33 @@ jobs:
         env:
           BUNNY_API_KEY: ${{ secrets.BUNNY_API_KEY }}
           CACHE_URL: ${{ steps.map.outputs.cache_url }}
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           set -euo pipefail
           if [ -z "${BUNNY_API_KEY:-}" ]; then
+            if [ "$DEPLOY_ENVIRONMENT" = "qa" ]; then
+              echo "::warning::Missing BUNNY_API_KEY; QA deploy already completed, continuing without BunnyCDN purge."
+              exit 0
+            fi
             echo "::error::Missing BUNNY_API_KEY."
             exit 1
           fi
           if [ -z "${CACHE_URL:-}" ]; then
+            if [ "$DEPLOY_ENVIRONMENT" = "qa" ]; then
+              echo "::warning::Missing Bunny purge URL mapping; QA deploy already completed, continuing without BunnyCDN purge."
+              exit 0
+            fi
             echo "::error::Missing Bunny purge URL mapping."
             exit 1
           fi
-          curl -fsS -G \
+          if ! curl -fsS -G \
             -H "X-Api-Key: ${BUNNY_API_KEY}" \
             --data-urlencode "url=${CACHE_URL}" \
-            "https://api.dynabic.com/bn/purge?async=true" >/dev/null
+            "https://api.dynabic.com/bn/purge?async=true" >/dev/null; then
+            if [ "$DEPLOY_ENVIRONMENT" = "qa" ]; then
+              echo "::warning::BunnyCDN purge failed for ${CACHE_URL}; QA deploy already completed, continuing so cache-bypass verification can prove the origin update."
+              exit 0
+            fi
+            echo "::error::BunnyCDN purge failed for ${CACHE_URL}."
+            exit 1
+          fi
