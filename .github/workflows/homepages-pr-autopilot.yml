@@ -35,3 +35,6 @@ jobs:
       repo_pat: ${{ secrets.HOMEPAGES_REPOS_PAT }}
       professionalize_api_service_key: ${{ secrets.PROFESSIONALIZE_API_SERVICE_KEY }}
       professionalize_base_url: ${{ secrets.PROFESSIONALIZE_BASE_URL }}
+      review_app_id: ${{ secrets.HOMEPAGES_REVIEW_APP_ID }}
+      review_app_installation_id: ${{ secrets.HOMEPAGES_REVIEW_APP_INSTALLATION_ID }}
+      review_app_private_key: ${{ secrets.HOMEPAGES_REVIEW_APP_PRIVATE_KEY }}
