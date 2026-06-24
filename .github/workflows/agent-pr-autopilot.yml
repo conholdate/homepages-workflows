@@ -70,9 +70,23 @@ jobs:
         shell: bash
         env:
           GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
+          GITHUB_HOMEPAGES_REVIEW_APP_ID: ${{ secrets.HOMEPAGES_REVIEW_APP_ID }}
+          GITHUB_HOMEPAGES_REVIEW_APP_INSTALLATION_ID: ${{ secrets.HOMEPAGES_REVIEW_APP_INSTALLATION_ID }}
+          GITHUB_HOMEPAGES_REVIEW_APP_PRIVATE_KEY_PATH: .secrets/homepages-review-agent.private-key.pem
+          HOMEPAGES_REVIEW_APP_PRIVATE_KEY: ${{ secrets.HOMEPAGES_REVIEW_APP_PRIVATE_KEY }}
           PR_NUMBER: ${{ inputs.pr_number }}
           APPLY: ${{ inputs.apply }}
         run: |
+          mkdir -p .secrets
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          value = (os.environ.get("HOMEPAGES_REVIEW_APP_PRIVATE_KEY") or "").lstrip("\ufeff")
+          if value:
+              path = Path(os.environ["GITHUB_HOMEPAGES_REVIEW_APP_PRIVATE_KEY_PATH"])
+              path.write_text(value, encoding="utf-8")
+          PY
           args=(
             -m homepages_agent
             pr-autopilot
