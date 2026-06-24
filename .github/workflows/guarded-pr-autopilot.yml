@@ -31,6 +31,12 @@ on:
         required: true
       professionalize_base_url:
         required: true
+      review_app_id:
+        required: true
+      review_app_installation_id:
+        required: true
+      review_app_private_key:
+        required: true
 
 permissions:
   contents: read
@@ -79,10 +85,27 @@ jobs:
       - name: Install
         run: python -m pip install -e . playwright
 
+      - name: Prepare review app private key
+        shell: bash
+        env:
+          REVIEW_APP_PRIVATE_KEY: ${{ secrets.review_app_private_key }}
+        run: |
+          mkdir -p .secrets
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          key = os.environ["REVIEW_APP_PRIVATE_KEY"].lstrip("\ufeff")
+          Path(".secrets/homepages-review-agent.private-key.pem").write_text(key, encoding="utf-8")
+          PY
+
       - name: Run PR autopilot
         shell: bash
         env:
           GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.repo_pat }}
+          GITHUB_HOMEPAGES_REVIEW_APP_ID: ${{ secrets.review_app_id }}
+          GITHUB_HOMEPAGES_REVIEW_APP_INSTALLATION_ID: ${{ secrets.review_app_installation_id }}
+          GITHUB_HOMEPAGES_REVIEW_APP_PRIVATE_KEY_PATH: .secrets/homepages-review-agent.private-key.pem
           PROFESSIONALIZE_API_SERVICE_KEY: ${{ secrets.professionalize_api_service_key }}
           PROFESSIONALIZE_BASE_URL: ${{ secrets.professionalize_base_url }}
           TARGET_REPOSITORY: ${{ inputs.target_repository }}
