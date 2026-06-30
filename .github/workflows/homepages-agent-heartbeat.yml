@@ -81,12 +81,16 @@ jobs:
         run: python -m homepages_agent coordination-check --write --allow-discard-local-changes
 
       - name: Validation bundle
+        id: validation
         working-directory: homepages-agent
+        continue-on-error: true
         run: python -m homepages_agent validation-bundle --site all --environment stage --require-variant claude-inspired-v1 --timeout 240 --write
 
       - name: Pilot readiness
+        id: readiness
         working-directory: homepages-agent
         if: ${{ always() }}
+        continue-on-error: true
         run: python -m homepages_agent pilot-readiness --site all --write
 
       - name: Write heartbeat summary
@@ -102,6 +106,9 @@ jobs:
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo "- Agent ref: ${{ github.event.inputs.agent_ref || 'main' }}"
             echo "- Homepages ref: ${{ github.event.inputs.homepages_ref || 'codex/aspose-metrics-adaptive-v1-20260628' }}"
+            echo "- Coordination check: ${{ steps.validation.outcome == 'skipped' && 'not reached' || 'passed' }}"
+            echo "- Validation bundle: ${{ steps.validation.outcome }}"
+            echo "- Pilot readiness: ${{ steps.readiness.outcome }}"
             echo "- Created UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > reports/heartbeat/latest-heartbeat.md
 
