@@ -52,6 +52,16 @@ jobs:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Configure nested git authentication
+        shell: bash
+        env:
+          AGENT_REPO_PAT: ${{ secrets.AGENT_REPO_PAT }}
+          HOMEPAGES_SOURCE_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+        run: |
+          set -euo pipefail
+          git config --global url."https://x-access-token:${AGENT_REPO_PAT}@github.com/conholdate/homepages-agent".insteadOf "https://github.com/conholdate/homepages-agent"
+          git config --global url."https://x-access-token:${HOMEPAGES_SOURCE_PAT}@github.com/conholdate/homepages".insteadOf "https://github.com/conholdate/homepages"
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
