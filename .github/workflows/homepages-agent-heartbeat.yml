@@ -12,7 +12,7 @@ on:
       homepages_ref:
         description: Branch, tag, or SHA in conholdate/homepages
         required: false
-        default: codex/aspose-metrics-adaptive-v1-20260628
+        default: ""
 
 permissions:
   contents: read
@@ -31,6 +31,7 @@ jobs:
       HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
       GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
       HOMEPAGES_AGENT_HUGO_BIN: /usr/local/bin/hugo
+      HOMEPAGES_QA_SOURCE_REF: ${{ github.event.inputs.homepages_ref || vars.HOMEPAGES_QA_SOURCE_REF || 'codex/aspose-org-products-v1' }}
 
     steps:
       - name: Checkout homepages-agent
@@ -47,7 +48,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: conholdate/homepages
-          ref: ${{ github.event.inputs.homepages_ref || 'codex/aspose-metrics-adaptive-v1-20260628' }}
+          ref: ${{ env.HOMEPAGES_QA_SOURCE_REF }}
           token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
           path: homepages
           submodules: recursive
@@ -105,7 +106,7 @@ jobs:
             echo
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
             echo "- Agent ref: ${{ github.event.inputs.agent_ref || 'main' }}"
-            echo "- Homepages ref: ${{ github.event.inputs.homepages_ref || 'codex/aspose-metrics-adaptive-v1-20260628' }}"
+            echo "- Homepages ref: ${HOMEPAGES_QA_SOURCE_REF}"
             echo "- Coordination check: ${{ steps.validation.outcome == 'skipped' && 'not reached' || 'passed' }}"
             echo "- Validation bundle: ${{ steps.validation.outcome }}"
             echo "- Pilot readiness: ${{ steps.readiness.outcome }}"
