@@ -1,0 +1,99 @@
+name: Homepages Agent Menu Health
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      agent_ref:
+        description: Branch, tag, or SHA in conholdate/homepages-agent
+        required: false
+        default: main
+      homepages_ref:
+        description: Branch, tag, or SHA in conholdate/homepages
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: homepages-agent-menu-health
+  cancel-in-progress: false
+
+jobs:
+  menu-health:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
+      HOMEPAGES_AGENT_MANAGED_SCOPE: aspose
+      HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
+      HOMEPAGES_QA_SOURCE_REF: ${{ github.event.inputs.homepages_ref || vars.HOMEPAGES_QA_SOURCE_REF || 'codex/aspose-org-products-v1' }}
+
+    steps:
+      - name: Checkout homepages-agent
+        uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages-agent
+          ref: ${{ github.event.inputs.agent_ref || 'main' }}
+          token: ${{ secrets.AGENT_REPO_PAT }}
+          path: homepages-agent
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout homepages source
+        uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages
+          ref: ${{ env.HOMEPAGES_QA_SOURCE_REF }}
+          token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+          path: homepages
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Homepages Agent
+        working-directory: homepages-agent
+        run: python -m pip install -e .
+
+      - name: Run menu health
+        working-directory: homepages-agent
+        run: python -m homepages_agent menu-health --site all --timeout 8 --write
+
+      - name: Upload menu health reports
+        uses: actions/upload-artifact@v4
+        if: ${{ always() }}
+        with:
+          name: homepages-agent-menu-health
+          path: |
+            homepages-agent/reports/menu-health/menu-health.json
+            homepages-agent/reports/menu-health/menu-health.md
+            homepages-agent/reports/menu-health/menu-team-request.md
+
+      - name: Commit refreshed menu health reports
+        working-directory: homepages-agent
+        shell: bash
+        run: |
+          set -euo pipefail
+          git add -f reports/menu-health/menu-health.json reports/menu-health/menu-health.md reports/menu-health/menu-team-request.md
+          if git diff --cached --quiet; then
+            echo "No menu-health report changes to commit."
+            exit 0
+          fi
+          git config user.name "Homepages Agent"
+          git config user.email "homepages.agent@conholdate.com"
+          cat > /tmp/menu-health-commit-message.txt <<'MSG'
+Refresh menu health reports
+
+Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>
+Co-authored-by: Codex <codex@openai.com>
+Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>
+MSG
+          git commit -F /tmp/menu-health-commit-message.txt
+          git remote set-url origin "https://x-access-token:${GITHUB_HOMEPAGES_REPOS_PAT}@github.com/conholdate/homepages-agent.git"
+          git push origin HEAD:main
