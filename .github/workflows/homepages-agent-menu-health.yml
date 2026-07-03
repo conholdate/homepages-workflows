@@ -87,13 +87,13 @@ jobs:
           fi
           git config user.name "Homepages Agent"
           git config user.email "homepages.agent@conholdate.com"
-          cat > /tmp/menu-health-commit-message.txt <<'MSG'
-Refresh menu health reports
-
-Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>
-Co-authored-by: Codex <codex@openai.com>
-Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>
-MSG
+          {
+            echo "Refresh menu health reports"
+            echo
+            echo "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>"
+            echo "Co-authored-by: Codex <codex@openai.com>"
+            echo "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+          } > /tmp/menu-health-commit-message.txt
           git commit -F /tmp/menu-health-commit-message.txt
           git remote set-url origin "https://x-access-token:${GITHUB_HOMEPAGES_REPOS_PAT}@github.com/conholdate/homepages-agent.git"
           git push origin HEAD:main
