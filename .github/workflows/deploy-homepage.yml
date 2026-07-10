@@ -1,4 +1,5 @@
 name: Deploy Homepage
+run-name: "Deploy ${{ inputs.site }} → ${{ inputs.environment }} (${{ inputs.ref }})${{ inputs.deploy == true && '' || ' [build-only]' }}"
 
 on:
   workflow_dispatch:
