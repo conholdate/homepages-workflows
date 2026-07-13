@@ -30,7 +30,7 @@ jobs:
       GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
       HOMEPAGES_AGENT_MANAGED_SCOPE: aspose
       HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
-      HOMEPAGES_QA_SOURCE_REF: ${{ github.event.inputs.homepages_ref || vars.HOMEPAGES_QA_SOURCE_REF || 'codex/aspose-org-products-v1' }}
+      HOMEPAGES_QA_SOURCE_REF: ${{ github.event.inputs.homepages_ref || vars.HOMEPAGES_QA_SOURCE_REF || 'qa-homepages-v1' }}
 
     steps:
       - name: Checkout homepages-agent
