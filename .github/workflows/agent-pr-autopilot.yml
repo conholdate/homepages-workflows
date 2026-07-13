@@ -32,7 +32,7 @@ jobs:
       apply: ${{ inputs.apply }}
       status_context: Homepages Agent PR Autopilot
     secrets:
-      repo_pat: ${{ secrets.AGENT_REPO_PAT }}
+      repo_pat: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
       professionalize_api_service_key: ${{ secrets.PROFESSIONALIZE_API_SERVICE_KEY }}
       professionalize_base_url: ${{ secrets.PROFESSIONALIZE_BASE_URL }}
       review_app_id: ${{ secrets.HOMEPAGES_REVIEW_APP_ID }}
