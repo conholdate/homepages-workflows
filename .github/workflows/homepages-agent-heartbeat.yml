@@ -29,7 +29,7 @@ jobs:
     env:
       HOMEPAGES_AGENT_MANAGED_SCOPE: aspose
       HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
-      GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.AGENT_REPO_PAT }}
+      GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
       HOMEPAGES_AGENT_HUGO_BIN: /usr/local/bin/hugo
       HOMEPAGES_QA_SOURCE_REF: ${{ github.event.inputs.homepages_ref || vars.HOMEPAGES_QA_SOURCE_REF || 'qa-homepages-v1' }}
 
@@ -39,7 +39,7 @@ jobs:
         with:
           repository: conholdate/homepages-agent
           ref: ${{ github.event.inputs.agent_ref || 'main' }}
-          token: ${{ secrets.AGENT_REPO_PAT }}
+          token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
           path: homepages-agent
           fetch-depth: 0
           persist-credentials: false
