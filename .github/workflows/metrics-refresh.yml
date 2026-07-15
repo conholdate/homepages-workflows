@@ -93,8 +93,6 @@ jobs:
           homepages_repo="${GITHUB_WORKSPACE}/homepages"
           workflows_repo="${GITHUB_WORKSPACE}/workflows"
           agent_repo="${GITHUB_WORKSPACE}/homepages-agent"
-          main_changed=false
-          qa_changed=false
 
           refresh_branch() {
             local branch="$1"
