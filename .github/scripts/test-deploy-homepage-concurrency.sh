@@ -4,11 +4,14 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workflow="${script_dir}/../workflows/deploy-homepage.yml"
 
+# The patterns intentionally contain literal GitHub expression syntax.
+# shellcheck disable=SC2016
 if ! grep -Fq 'group: homepage-${{ inputs.site }}-${{ inputs.environment }}' "${workflow}"; then
   echo "deploy-homepage concurrency must serialize by site and environment" >&2
   exit 1
 fi
 
+# shellcheck disable=SC2016
 if grep -Fq 'group: homepage-${{ inputs.site }}-${{ inputs.environment }}-${{ inputs.ref }}' "${workflow}"; then
   echo "deploy-homepage concurrency must not include ref" >&2
   exit 1
