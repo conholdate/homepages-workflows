@@ -5,11 +5,13 @@ on:
   pull_request:
     paths:
       - ".github/workflows/**"
+      - ".github/scripts/**"
   push:
     branches:
       - main
     paths:
       - ".github/workflows/**"
+      - ".github/scripts/**"
 
 permissions:
   contents: read
@@ -51,3 +53,7 @@ jobs:
       - name: Lint GitHub workflows
         shell: bash
         run: actionlint -color .github/workflows/*.yml
+
+      - name: Lint workflow scripts
+        shell: bash
+        run: shellcheck .github/scripts/*.sh

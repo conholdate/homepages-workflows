@@ -50,6 +50,11 @@ workflow code does not need to change when IDs rotate.
 - `ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID`
 - `ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID`
 
+Metrics refresh scheduling:
+
+- `METRICS_REFRESH_CRON_ENABLED`
+- `METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED`
+
 ## Current Scope
 
 The generic deploy workflow maps:

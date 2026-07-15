@@ -94,6 +94,13 @@ jobs:
         continue-on-error: true
         run: python -m homepages_agent pilot-readiness --site all --write
 
+      - name: Metrics freshness
+        id: metrics
+        working-directory: homepages-agent
+        if: ${{ always() }}
+        continue-on-error: true
+        run: python -m homepages_agent metrics-validate --site all --write
+
       - name: Write heartbeat summary
         working-directory: homepages-agent
         if: ${{ always() }}
@@ -110,6 +117,7 @@ jobs:
             echo "- Coordination check: ${{ steps.validation.outcome == 'skipped' && 'not reached' || 'passed' }}"
             echo "- Validation bundle: ${{ steps.validation.outcome }}"
             echo "- Pilot readiness: ${{ steps.readiness.outcome }}"
+            echo "- Metrics freshness: ${{ steps.metrics.outcome }}"
             echo "- Created UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           } > reports/heartbeat/latest-heartbeat.md
 
@@ -122,4 +130,5 @@ jobs:
             homepages-agent/reports/latest-coordination-check.*
             homepages-agent/reports/latest-validation-bundle.*
             homepages-agent/reports/latest-pilot-readiness.*
+            homepages-agent/reports/latest-metrics-validate.*
             homepages-agent/reports/heartbeat/latest-heartbeat.md

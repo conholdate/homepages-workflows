@@ -28,6 +28,27 @@ deploy=false
 invalidate_cache=false
 ```
 
+## Metrics Refresh
+
+Use **Metrics Refresh** from the Actions tab to refresh baked Aspose metrics.
+The workflow checks out `conholdate/homepages-agent` and `conholdate/homepages`,
+runs `metrics-bake --site all --apply --write`, validates the refreshed metrics,
+and commits only `data/metrics/*.json` when values changed. It updates both
+`qa-homepages-v1` and `main` with the commit message
+`Refresh baked metrics (scheduled)`.
+
+The main-branch metrics commit is a narrow D-040 exception lane. A workflow guard
+hard-fails if any staged path is outside `data/metrics/*.json`.
+
+The workflow has a daily `02:10 UTC` schedule, but scheduled mutation stays
+disabled until `METRICS_REFRESH_CRON_ENABLED=true` is set after the first green
+manual proof. Production deploy dispatches are also gated: manual runs require
+the `deploy_production` input, and scheduled runs require
+`METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true`. When enabled and a main metrics
+commit was created, the workflow dispatches `deploy-homepage.yml` for the six
+Aspose production sites at `ref=main`; no deploy is dispatched when there are no
+metric changes.
+
 ## Safety Rules
 
 - Workflows are `workflow_dispatch` only.
