@@ -1,5 +1,5 @@
 name: Deploy Homepage
-run-name: "Deploy ${{ inputs.site }} → ${{ inputs.environment }} (${{ inputs.ref }})${{ !inputs.deploy && ' [build-only]' || '' }}"
+run-name: "Deploy ${{ inputs.site }} → ${{ inputs.environment }} (${{ inputs.ref }})${{ inputs.transaction_id && format(' tx={0}', inputs.transaction_id) || '' }}${{ !inputs.deploy && ' [build-only]' || '' }}"
 
 on:
   workflow_dispatch:
@@ -42,12 +42,17 @@ on:
         required: true
         type: boolean
         default: false
+      transaction_id:
+        description: Optional production transaction id used by Homepages Agent to correlate and poll workflow runs
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
 
 concurrency:
-  group: homepage-${{ inputs.site }}-${{ inputs.environment }}-${{ inputs.ref }}
+  group: homepage-${{ inputs.site }}-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:

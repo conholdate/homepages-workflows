@@ -17,6 +17,8 @@ Inputs:
 - `ref`: branch, tag, or commit SHA from `conholdate/homepages`
 - `deploy`: set `false` for build-only verification
 - `invalidate_cache`: set `true` to purge CloudFront or BunnyCDN where mapped
+- `transaction_id`: optional Homepages Agent transaction id for publish/rollback
+  run correlation
 
 Default safe test:
 
@@ -27,6 +29,11 @@ ref=main
 deploy=false
 invalidate_cache=false
 ```
+
+Deploys are serialized by destination with concurrency group
+`homepage-${{ inputs.site }}-${{ inputs.environment }}`. The source `ref` is
+intentionally not part of the group, so two production deploys for the same site
+cannot write the same destination concurrently.
 
 ## Metrics Refresh
 

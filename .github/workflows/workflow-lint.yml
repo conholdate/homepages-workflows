@@ -57,3 +57,7 @@ jobs:
       - name: Lint workflow scripts
         shell: bash
         run: shellcheck .github/scripts/*.sh
+
+      - name: Check deploy workflow concurrency contract
+        shell: bash
+        run: bash .github/scripts/test-deploy-homepage-concurrency.sh
