@@ -1,5 +1,23 @@
 # Homepages Workflows
 
+## Deployment source identity
+
+`deploy-homepage.yml` resolves the checked-out `conholdate/homepages` commit
+with `git rev-parse HEAD`; the workflow repository commit is never substituted
+for that source identity. Every build writes the versioned, non-secret contract
+to `public/.well-known/homepages-deployment.json` and uploads a byte-identical
+`homepages-deployment.json` run artifact. The public contract contains only the
+source SHA, site, environment, workflow repository/run/attempt, schema/kind,
+and generation timestamp. It deliberately excludes refs supplied by users,
+transaction or approval identifiers, credentials, and deployment-provider
+details.
+
+The same static identity file is deployed through Hugo for CloudFront, Ceph,
+BunnyCDN, or any future provider, so Homepages Agent can reconcile without a
+provider-specific control-plane API. A source SHA that predates current
+monorepo `main` is not automatically stale: the agent uses its managed-site
+registry to compare only render inputs relevant to that site.
+
 Public GitHub Actions orchestrator for homepage build/deploy jobs.
 
 This repository is intentionally public so GitHub-hosted Actions minutes are

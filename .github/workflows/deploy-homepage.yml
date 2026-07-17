@@ -60,8 +60,16 @@ jobs:
     name: ${{ inputs.site }} / ${{ inputs.environment }}
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: homepages-source
 
     steps:
+      - name: Checkout workflow support
+        uses: actions/checkout@v4
+        with:
+          path: workflow-support
+
       - name: Checkout homepages source
         uses: actions/checkout@v4
         with:
@@ -70,6 +78,17 @@ jobs:
           token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
           submodules: recursive
           fetch-depth: 0
+          path: homepages-source
+
+      - name: Resolve checked-out homepages source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_sha="$(git rev-parse HEAD)"
+          git cat-file -e "${source_sha}^{commit}"
+          echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
+          echo "Resolved conholdate/homepages source: ${source_sha}" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve site deployment map
         id: map
@@ -269,6 +288,27 @@ jobs:
 
       - name: Build
         run: hugo --config "${{ steps.map.outputs.config }}" --minify
+
+      - name: Write deployment identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ../workflow-support/.github/scripts/write_deployment_identity.py \
+            --source-sha "${{ steps.source.outputs.source_sha }}" \
+            --site "${{ inputs.site }}" \
+            --environment "${{ inputs.environment }}" \
+            --run-id "${{ github.run_id }}" \
+            --run-attempt "${{ github.run_attempt }}" \
+            --output-root public \
+            --evidence-dir deployment-evidence
+
+      - name: Upload deployment identity evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: homepages-deployment-identity-${{ inputs.site }}-${{ inputs.environment }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: homepages-source/deployment-evidence/homepages-deployment.json
+          if-no-files-found: error
+          retention-days: 90
 
       - name: Deploy
         if: ${{ inputs.deploy }}
