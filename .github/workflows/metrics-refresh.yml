@@ -106,7 +106,7 @@ jobs:
             git clean -fd -- data/metrics data/products.json
 
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" products-catalog-sync --apply --write)
-            (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-bake --site all --apply --write)
+            (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-bake --site all --apply --skip-source-label-sync --write)
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-validate --site all --write)
 
             git add data/products.json data/metrics/*.json
