@@ -3,7 +3,13 @@ set -euo pipefail
 
 paths=("$@")
 if [ "$#" -eq 0 ]; then
-  mapfile -t paths < <(git diff --cached --name-only)
+  mapfile -t paths < <(
+    {
+      git diff --cached --name-only
+      git diff --name-only
+      git ls-files --others --exclude-standard
+    } | sort -u
+  )
 fi
 
 bad_paths=()

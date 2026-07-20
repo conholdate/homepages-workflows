@@ -26,3 +26,17 @@ if "${guard}" data/families_order.json >/tmp/metrics-refresh-guard-data.out 2>&1
 fi
 
 grep -q "Out-of-scope path: data/families_order.json" /tmp/metrics-refresh-guard-data.out
+
+tmp_repo="$(mktemp -d)"
+trap 'rm -rf "${tmp_repo}"' EXIT
+git -C "${tmp_repo}" init -q
+mkdir -p "${tmp_repo}/data/metrics"
+printf '{}\n' > "${tmp_repo}/data/products.json"
+printf '{}\n' > "${tmp_repo}/data/metrics/aspose.com.json"
+git -C "${tmp_repo}" add data/products.json data/metrics/aspose.com.json
+printf 'unexpected\n' > "${tmp_repo}/README.md"
+if (cd "${tmp_repo}" && "${guard}") >/tmp/metrics-refresh-guard-worktree.out 2>&1; then
+  echo "Expected unstaged or untracked out-of-scope path to fail"
+  exit 1
+fi
+grep -q "Out-of-scope path: README.md" /tmp/metrics-refresh-guard-worktree.out

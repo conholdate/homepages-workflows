@@ -15,7 +15,9 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
 
     def test_catalog_sync_precedes_all_site_bake_and_validation(self) -> None:
         catalog = self.workflow.index("products-catalog-sync --apply --write")
-        bake = self.workflow.index("metrics-bake --site all --apply --write")
+        bake = self.workflow.index(
+            "metrics-bake --site all --apply --skip-source-label-sync --write"
+        )
         validate = self.workflow.index("metrics-validate --site all --write")
         self.assertLess(catalog, bake)
         self.assertLess(bake, validate)
@@ -27,6 +29,8 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         )
         self.assertIn('"$path" != "data/products.json"', guard)
         self.assertIn("^data/metrics/[^/]+\\.json$", guard)
+        self.assertIn("git diff --name-only", guard)
+        self.assertIn("git ls-files --others --exclude-standard", guard)
 
     def test_production_uses_and_verifies_exact_main_sha(self) -> None:
         self.assertIn("SOURCE_SHA: ${{ steps.refresh.outputs.main_sha }}", self.workflow)
