@@ -20,6 +20,26 @@ registry to compare only render inputs relevant to that site.
 
 Public GitHub Actions orchestrator for homepage build/deploy jobs.
 
+## Daily metrics refresh
+
+`Metrics Refresh` runs daily at `02:10 UTC` when repository variable
+`METRICS_REFRESH_CRON_ENABLED=true`. For both `qa-homepages-v1` and `main` it
+first synchronizes `data/products.json` from the fixed
+`https://products.aspose.org/` **Available Now** catalog, then bakes and
+validates metrics for all managed Aspose sites. Its commit scope is restricted
+to `data/products.json` and `data/metrics/*.json`; catalog removals, ambiguous
+GitHub repository evidence, endpoint failures, stale values, validation errors,
+or any unrelated changed path stop the run before commit or deployment.
+
+When `METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true`, a scheduled main metrics
+commit automatically dispatches all six Aspose production homepage rebuilds at
+the exact committed SHA. The workflow correlates and polls every deploy run,
+requires success, verifies each public
+`/.well-known/homepages-deployment.json` identity at that SHA, and confirms
+remote `main` did not drift during the rollout. This is a narrow metrics-only
+automation path; it grants no unattended content, UI, configuration, or theme
+publishing authority.
+
 This repository is intentionally public so GitHub-hosted Actions minutes are
 not consumed from the private `conholdate/homepages` repository. Workflow code
 is public; all credentials must stay in encrypted GitHub Actions secrets.
