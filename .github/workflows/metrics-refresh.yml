@@ -27,7 +27,7 @@ jobs:
   refresh:
     name: Refresh baked metrics
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 75
     if: ${{ github.event_name != 'schedule' || vars.METRICS_REFRESH_CRON_ENABLED == 'true' }}
 
     env:
@@ -97,21 +97,24 @@ jobs:
           refresh_branch() {
             local branch="$1"
             local changed_var="$2"
+            local sha_var="$3"
 
             cd "${homepages_repo}"
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
             git checkout -B "${branch}" "origin/${branch}"
             git reset --hard "origin/${branch}"
-            git clean -fd -- data/metrics
+            git clean -fd -- data/metrics data/products.json
 
+            (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" products-catalog-sync --apply --write)
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-bake --site all --apply --write)
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-validate --site all --write)
 
-            git add data/metrics/*.json
+            git add data/products.json data/metrics/*.json
             "${workflows_repo}/.github/scripts/metrics-refresh-scope-guard.sh"
 
             if git diff --cached --quiet; then
               printf '%s=false\n' "${changed_var}" >> "${GITHUB_OUTPUT}"
+              printf '%s=%s\n' "${sha_var}" "$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
               echo "No metrics changes for ${branch}."
               return
             fi
@@ -123,31 +126,119 @@ jobs:
               -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin "HEAD:${branch}"
             printf '%s=true\n' "${changed_var}" >> "${GITHUB_OUTPUT}"
+            printf '%s=%s\n' "${sha_var}" "$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
           }
 
           cd "${agent_repo}"
-          refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed
-          refresh_branch main main_changed
+          refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed qa_sha
+          refresh_branch main main_changed main_sha
 
       - name: Dispatch production homepage deploys
         if: ${{ steps.refresh.outputs.main_changed == 'true' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.refresh.outputs.main_sha }}
         run: |
           set -euo pipefail
           sites=(aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org)
+
+          if [ -z "${HOMEPAGES_SOURCE_PAT:-}" ]; then
+            echo "::error::Missing HOMEPAGES_SOURCE_PAT"
+            exit 1
+          fi
+          auth_header="$(printf 'x-access-token:%s' "${HOMEPAGES_SOURCE_PAT}" | base64 -w0)"
+          remote_main_sha() {
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              ls-remote https://github.com/conholdate/homepages.git refs/heads/main | awk '{print $1}'
+          }
+
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Metrics production source is not an exact commit SHA: ${SOURCE_SHA}"
+            exit 1
+          fi
+
+          remote_main="$(remote_main_sha)"
+          if [ "${remote_main}" != "${SOURCE_SHA}" ]; then
+            echo "::error::Homepages main drifted before metrics deploy: expected ${SOURCE_SHA}, found ${remote_main}"
+            exit 1
+          fi
+
+          declare -A run_ids
           for site in "${sites[@]}"; do
-            payload="$(jq -n --arg ref "main" --arg site "${site}" '{ref:$ref,inputs:{site:$site,environment:"production",ref:"main",deploy:"true",invalidate_cache:"true"}}')"
-            curl -fsS \
-              -X POST \
-              -H "Authorization: Bearer ${GH_TOKEN}" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-homepage.yml/dispatches" \
-              -d "${payload}" >/dev/null
-            echo "Dispatched production deploy for ${site} at main."
+            transaction_id="metrics-refresh-${GITHUB_RUN_ID}-${site//./-}"
+            gh workflow run deploy-homepage.yml \
+              --repo "${GITHUB_REPOSITORY}" \
+              --ref main \
+              -f "site=${site}" \
+              -f "environment=production" \
+              -f "ref=${SOURCE_SHA}" \
+              -f "deploy=true" \
+              -f "invalidate_cache=true" \
+              -f "transaction_id=${transaction_id}"
+
+            run_id=""
+            for _ in $(seq 1 30); do
+              runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-homepage.yml/runs?event=workflow_dispatch&per_page=100")"
+              run_id="$(jq -r --arg marker "tx=${transaction_id}" '.workflow_runs | map(select(.display_title | contains($marker))) | sort_by(.created_at) | last | .id // empty' <<<"${runs_json}")"
+              [ -n "${run_id}" ] && break
+              sleep 2
+            done
+            if [ -z "${run_id}" ]; then
+              echo "::error::Could not discover production deploy run for ${site} (${transaction_id})"
+              exit 1
+            fi
+            run_ids["${site}"]="${run_id}"
+            echo "Dispatched ${site} production deploy run ${run_id} at ${SOURCE_SHA}."
           done
+
+          for site in "${sites[@]}"; do
+            run_id="${run_ids[$site]}"
+            completed=false
+            for _ in $(seq 1 180); do
+              run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+              status="$(jq -r '.status' <<<"${run_json}")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"${run_json}")"
+              if [ "${status}" = "completed" ]; then
+                if [ "${conclusion}" != "success" ]; then
+                  echo "::error::Production deploy run ${run_id} for ${site} completed as ${conclusion}"
+                  exit 1
+                fi
+                completed=true
+                break
+              fi
+              sleep 10
+            done
+            if [ "${completed}" != "true" ]; then
+              echo "::error::Timed out waiting for production deploy run ${run_id} for ${site}"
+              exit 1
+            fi
+
+            verified=false
+            identity_url="https://www.${site}/.well-known/homepages-deployment.json"
+            for attempt in $(seq 1 60); do
+              identity="$(curl -fsS --compressed --max-time 20 "${identity_url}?metrics-refresh=${GITHUB_RUN_ID}-${attempt}" || true)"
+              actual_sha="$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null || true)"
+              actual_site="$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null || true)"
+              actual_environment="$(jq -r '.environment // ""' <<<"${identity}" 2>/dev/null || true)"
+              if [ "${actual_sha}" = "${SOURCE_SHA}" ] && [ "${actual_site}" = "${site}" ] && [ "${actual_environment}" = "production" ]; then
+                verified=true
+                break
+              fi
+              sleep 10
+            done
+            if [ "${verified}" != "true" ]; then
+              echo "::error::Public deployment identity did not converge for ${site} at ${SOURCE_SHA}"
+              exit 1
+            fi
+            echo "Verified ${site} production identity at ${SOURCE_SHA} (run ${run_id})."
+          done
+
+          remote_main_after="$(remote_main_sha)"
+          if [ "${remote_main_after}" != "${SOURCE_SHA}" ]; then
+            echo "::error::Homepages main changed during metrics deploy: expected ${SOURCE_SHA}, found ${remote_main_after}"
+            exit 1
+          fi
 
       - name: Metrics refresh summary
         if: ${{ always() }}
@@ -159,6 +250,6 @@ jobs:
             echo
             echo "- QA branch changed: ${{ steps.refresh.outputs.qa_changed || 'not reached' }}"
             echo "- Main branch changed: ${{ steps.refresh.outputs.main_changed || 'not reached' }}"
-            echo "- Production deploy requested: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_production || vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true' }}"
+            echo "- Production deploy requested: ${{ steps.refresh.outputs.main_changed == 'true' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
