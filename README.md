@@ -103,6 +103,12 @@ commit was created, the workflow dispatches `deploy-homepage.yml` for the six
 Aspose production sites at `ref=main`; no deploy is dispatched when there are no
 metric changes.
 
+A manual run with `deploy_production=false` is QA-only: it refreshes and
+synchronizes `qa-homepages-v1` but leaves `main` unchanged. Scheduled runs
+refresh `main` only when the production-deploy repository variable is enabled;
+manual runs do so only with `deploy_production=true`. Both use the production
+gate above.
+
 ## Safety Rules
 
 - Homepage deployment workflows are `workflow_dispatch` only; Metrics Refresh

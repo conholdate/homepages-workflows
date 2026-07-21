@@ -56,6 +56,16 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("missing robots noindex", self.workflow)
         self.assertIn('remote_qa_after="$(remote_qa_sha)"', self.workflow)
 
+    def test_manual_qa_only_refresh_does_not_mutate_main(self) -> None:
+        self.assertIn(
+            "REFRESH_MAIN: ${{ (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.deploy_production) }}",
+            self.workflow,
+        )
+        self.assertIn('if [ "${REFRESH_MAIN}" = "true" ]; then', self.workflow)
+        self.assertIn("Manual QA-only refresh left homepages main unchanged", self.workflow)
+        self.assertIn("printf 'main_changed=false\\n'", self.workflow)
+        self.assertIn("ls-remote https://github.com/conholdate/homepages.git refs/heads/main", self.workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
