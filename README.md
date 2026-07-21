@@ -31,6 +31,12 @@ to `data/products.json` and `data/metrics/*.json`; catalog removals, ambiguous
 GitHub repository evidence, endpoint failures, stale values, validation errors,
 or any unrelated changed path stop the run before commit or deployment.
 
+After each successful refresh, the workflow compares all six public QA
+deployment identities with the exact `qa-homepages-v1` commit. Sites already
+serving that commit are skipped; stale sites are rebuilt, polled to success,
+and verified at the exact QA SHA. This also repairs a stale or partial QA
+rollout when the daily data files themselves did not change.
+
 When `METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true`, a scheduled main metrics
 commit automatically dispatches all six Aspose production homepage rebuilds at
 the exact committed SHA. The workflow correlates and polls every deploy run,
@@ -77,17 +83,20 @@ cannot write the same destination concurrently.
 
 Use **Metrics Refresh** from the Actions tab to refresh baked Aspose metrics.
 The workflow checks out `conholdate/homepages-agent` and `conholdate/homepages`,
-runs `metrics-bake --site all --apply --write`, validates the refreshed metrics,
-and commits only `data/metrics/*.json` when values changed. It updates both
+runs catalog sync plus data-only all-site metric bake, validates the refreshed
+metrics, and commits only `data/products.json` and flat
+`data/metrics/*.json` paths when values changed. It updates both
 `qa-homepages-v1` and `main` with the commit message
 `Refresh baked metrics (scheduled)`.
 
-The main-branch metrics commit is a narrow D-040 exception lane. A workflow guard
-hard-fails if any staged path is outside `data/metrics/*.json`.
+The QA and main metrics commits are a narrow data-only exception lane. A
+workflow guard hard-fails if any worktree path is outside
+`data/products.json` or flat `data/metrics/*.json`.
 
-The workflow has a daily `02:10 UTC` schedule, but scheduled mutation stays
-disabled until `METRICS_REFRESH_CRON_ENABLED=true` is set after the first green
-manual proof. Production deploy dispatches are also gated: manual runs require
+The workflow has a daily `02:10 UTC` schedule, but scheduled mutation remains
+disabled unless `METRICS_REFRESH_CRON_ENABLED=true`. QA synchronization follows
+every enabled successful refresh and skips exact current deployments.
+Production deploy dispatches are separately gated: manual runs require
 the `deploy_production` input, and scheduled runs require
 `METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true`. When enabled and a main metrics
 commit was created, the workflow dispatches `deploy-homepage.yml` for the six
@@ -96,7 +105,8 @@ metric changes.
 
 ## Safety Rules
 
-- Workflows are `workflow_dispatch` only.
+- Homepage deployment workflows are `workflow_dispatch` only; Metrics Refresh
+  also has the documented daily schedule.
 - The source repository is checked out with `HOMEPAGES_SOURCE_PAT`.
 - Production jobs use the GitHub environment named `production`.
 - Do not echo secrets, credentials, tokens, or signed URLs in workflow steps.

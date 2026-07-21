@@ -39,6 +39,23 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn(".well-known/homepages-deployment.json", self.workflow)
         self.assertIn('remote_main_after="$(remote_main_sha)"', self.workflow)
 
+    def test_qa_is_synchronized_to_exact_qa_sha_even_when_metrics_are_unchanged(self) -> None:
+        qa_step = self.workflow.index("name: Synchronize QA homepage deployments")
+        production_step = self.workflow.index("name: Dispatch production homepage deploys")
+        self.assertLess(qa_step, production_step)
+        self.assertIn("name: Synchronize QA homepage deployments", self.workflow)
+        self.assertIn("always() && steps.refresh.outcome == 'success'", self.workflow)
+        self.assertIn("SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}", self.workflow)
+        self.assertIn('remote_qa="$(remote_qa_sha)"', self.workflow)
+        self.assertIn('-f "site=${site}"', self.workflow)
+        self.assertIn('-f "environment=qa"', self.workflow)
+        self.assertIn('-f "ref=${SOURCE_SHA}"', self.workflow)
+        self.assertIn("actions/runs/${run_id}", self.workflow)
+        self.assertIn("https://qa.${site}/.well-known/homepages-deployment.json", self.workflow)
+        self.assertIn("public_qa_has_noindex", self.workflow)
+        self.assertIn("missing robots noindex", self.workflow)
+        self.assertIn('remote_qa_after="$(remote_qa_sha)"', self.workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
