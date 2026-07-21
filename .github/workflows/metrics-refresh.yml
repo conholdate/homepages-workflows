@@ -133,6 +133,137 @@ jobs:
           refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed qa_sha
           refresh_branch main main_changed main_sha
 
+      - name: Synchronize QA homepage deployments
+        if: ${{ always() && steps.refresh.outcome == 'success' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}
+        run: |
+          set -euo pipefail
+          sites=(aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org)
+
+          if [ -z "${HOMEPAGES_SOURCE_PAT:-}" ]; then
+            echo "::error::Missing HOMEPAGES_SOURCE_PAT"
+            exit 1
+          fi
+          auth_header="$(printf 'x-access-token:%s' "${HOMEPAGES_SOURCE_PAT}" | base64 -w0)"
+          remote_qa_sha() {
+            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              ls-remote https://github.com/conholdate/homepages.git "refs/heads/${HOMEPAGES_QA_SOURCE_REF}" | awk '{print $1}'
+          }
+          public_qa_matches() {
+            local site="$1"
+            local cache_key="$2"
+            local identity
+            identity="$(curl -fsS --compressed --max-time 20 \
+              "https://qa.${site}/.well-known/homepages-deployment.json?metrics-refresh=${cache_key}" || true)"
+            [ "$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null || true)" = "${SOURCE_SHA}" ] && \
+              [ "$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null || true)" = "${site}" ] && \
+              [ "$(jq -r '.environment // ""' <<<"${identity}" 2>/dev/null || true)" = "qa" ]
+          }
+          public_qa_has_noindex() {
+            local site="$1"
+            local cache_key="$2"
+            local html
+            html="$(curl -fsS --compressed --max-time 20 \
+              "https://qa.${site}/?metrics-refresh=${cache_key}" || true)"
+            grep -Eiq '<meta[^>]*name="?robots"?[^>]*content="?[^>]*noindex' <<<"${html}"
+          }
+
+          if [[ ! "${SOURCE_SHA}" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Metrics QA source is not an exact commit SHA: ${SOURCE_SHA}"
+            exit 1
+          fi
+
+          remote_qa="$(remote_qa_sha)"
+          if [ "${remote_qa}" != "${SOURCE_SHA}" ]; then
+            echo "::error::Homepages QA ref drifted before metrics deploy: expected ${SOURCE_SHA}, found ${remote_qa}"
+            exit 1
+          fi
+
+          declare -A run_ids
+          for site in "${sites[@]}"; do
+            if public_qa_matches "${site}" "${GITHUB_RUN_ID}-before-${site//./-}"; then
+              echo "QA ${site} already serves ${SOURCE_SHA}; no deploy needed."
+              continue
+            fi
+
+            transaction_id="metrics-refresh-${GITHUB_RUN_ID}-qa-${site//./-}"
+            gh workflow run deploy-homepage.yml \
+              --repo "${GITHUB_REPOSITORY}" \
+              --ref main \
+              -f "site=${site}" \
+              -f "environment=qa" \
+              -f "ref=${SOURCE_SHA}" \
+              -f "deploy=true" \
+              -f "invalidate_cache=true" \
+              -f "transaction_id=${transaction_id}"
+
+            run_id=""
+            for _ in $(seq 1 30); do
+              runs_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-homepage.yml/runs?event=workflow_dispatch&per_page=100")"
+              run_id="$(jq -r --arg marker "tx=${transaction_id}" '.workflow_runs | map(select(.display_title | contains($marker))) | sort_by(.created_at) | last | .id // empty' <<<"${runs_json}")"
+              [ -n "${run_id}" ] && break
+              sleep 2
+            done
+            if [ -z "${run_id}" ]; then
+              echo "::error::Could not discover QA deploy run for ${site} (${transaction_id})"
+              exit 1
+            fi
+            run_ids["${site}"]="${run_id}"
+            echo "Dispatched ${site} QA deploy run ${run_id} at ${SOURCE_SHA}."
+          done
+
+          for site in "${sites[@]}"; do
+            run_id="${run_ids[$site]:-}"
+            if [ -n "${run_id}" ]; then
+              completed=false
+              for _ in $(seq 1 180); do
+                run_json="$(gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${run_id}")"
+                status="$(jq -r '.status' <<<"${run_json}")"
+                conclusion="$(jq -r '.conclusion // ""' <<<"${run_json}")"
+                if [ "${status}" = "completed" ]; then
+                  if [ "${conclusion}" != "success" ]; then
+                    echo "::error::QA deploy run ${run_id} for ${site} completed as ${conclusion}"
+                    exit 1
+                  fi
+                  completed=true
+                  break
+                fi
+                sleep 10
+              done
+              if [ "${completed}" != "true" ]; then
+                echo "::error::Timed out waiting for QA deploy run ${run_id} for ${site}"
+                exit 1
+              fi
+            fi
+
+            verified=false
+            for attempt in $(seq 1 60); do
+              if public_qa_matches "${site}" "${GITHUB_RUN_ID}-after-${site//./-}-${attempt}"; then
+                verified=true
+                break
+              fi
+              sleep 10
+            done
+            if [ "${verified}" != "true" ]; then
+              echo "::error::Public QA deployment identity did not converge for ${site} at ${SOURCE_SHA}"
+              exit 1
+            fi
+            if ! public_qa_has_noindex "${site}" "${GITHUB_RUN_ID}-noindex-${site//./-}"; then
+              echo "::error::Public QA root is missing robots noindex for ${site} at ${SOURCE_SHA}"
+              exit 1
+            fi
+            echo "Verified ${site} QA identity at ${SOURCE_SHA}${run_id:+ (run ${run_id})}."
+          done
+
+          remote_qa_after="$(remote_qa_sha)"
+          if [ "${remote_qa_after}" != "${SOURCE_SHA}" ]; then
+            echo "::error::Homepages QA ref changed during metrics deploy: expected ${SOURCE_SHA}, found ${remote_qa_after}"
+            exit 1
+          fi
+
       - name: Dispatch production homepage deploys
         if: ${{ steps.refresh.outputs.main_changed == 'true' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}
         shell: bash
@@ -249,6 +380,7 @@ jobs:
             echo "## Metrics Refresh"
             echo
             echo "- QA branch changed: ${{ steps.refresh.outputs.qa_changed || 'not reached' }}"
+            echo "- QA source synchronized: ${{ steps.refresh.outputs.qa_sha || 'not reached' }}"
             echo "- Main branch changed: ${{ steps.refresh.outputs.main_changed || 'not reached' }}"
             echo "- Production deploy requested: ${{ steps.refresh.outputs.main_changed == 'true' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
