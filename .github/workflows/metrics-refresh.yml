@@ -2,7 +2,7 @@ name: Metrics Refresh
 
 on:
   schedule:
-    - cron: "10 2 * * *"
+    - cron: "20 1,13 * * *"
   workflow_dispatch:
     inputs:
       agent_ref:
