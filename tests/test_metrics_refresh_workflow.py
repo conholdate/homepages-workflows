@@ -22,6 +22,9 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertLess(catalog, bake)
         self.assertLess(bake, validate)
 
+    def test_schedule_runs_after_the_common_upstream_metrics_cycle(self) -> None:
+        self.assertIn('cron: "20 1,13 * * *"', self.workflow)
+
     def test_commit_scope_is_limited_to_catalog_and_baked_metrics(self) -> None:
         self.assertIn("git add data/products.json data/metrics/*.json", self.workflow)
         guard = (ROOT / ".github" / "scripts" / "metrics-refresh-scope-guard.sh").read_text(

@@ -93,8 +93,9 @@ The QA and main metrics commits are a narrow data-only exception lane. A
 workflow guard hard-fails if any worktree path is outside
 `data/products.json` or flat `data/metrics/*.json`.
 
-The workflow has a daily `02:10 UTC` schedule, but scheduled mutation remains
-disabled unless `METRICS_REFRESH_CRON_ENABLED=true`. QA synchronization follows
+The workflow runs at `01:20` and `13:20 UTC`, after the common 12-hour
+intersection of the upstream metrics collection schedules. Scheduled mutation
+remains disabled unless `METRICS_REFRESH_CRON_ENABLED=true`. QA synchronization follows
 every enabled successful refresh and skips exact current deployments.
 Production deploy dispatches are separately gated: manual runs require
 the `deploy_production` input, and scheduled runs require
