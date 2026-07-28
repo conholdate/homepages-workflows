@@ -64,7 +64,7 @@ jobs:
       - name: Unit tests
         env:
           PYTHONPATH: src
-        run: python -m unittest discover -s tests
+        run: python -m homepages_agent.ci_test_profile --base-ref origin/main --run
 
       - name: Mark CI success
         if: ${{ success() }}
