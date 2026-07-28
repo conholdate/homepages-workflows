@@ -12,6 +12,14 @@ class AgentCiWorkflowTests(unittest.TestCase):
             "python -m homepages_agent.ci_test_profile --base-ref origin/main --run",
             workflow,
         )
+        self.assertIn(
+            "python -m homepages_agent.ci_test_profile --base-ref origin/main --needs-playwright",
+            workflow,
+        )
+        self.assertIn(
+            "if: ${{ steps.test-profile.outputs.needs_playwright == 'true' }}",
+            workflow,
+        )
         self.assertNotIn("python -m unittest discover -s tests", workflow)
 
 
