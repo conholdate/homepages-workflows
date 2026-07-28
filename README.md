@@ -132,6 +132,16 @@ the pinned PR head SHA, and the repository-specific merge policy.
 The homepages wrapper uses the encrypted `HOMEPAGES_REPOS_PAT` secret; the agent
 wrapper continues to use `AGENT_REPO_PAT`.
 
+## Homepages Agent CI
+
+`agent-ci.yml` checks out the requested exact Homepages Agent ref, compiles the
+source and tests, and lets the Agent select tests from the changed Python
+module dependency graph. Documentation-only changes run the documentation
+contract tests. Unknown paths, shared build/workflow infrastructure, or a broad
+affected set fall back to the complete suite. The resulting commit status
+remains `Homepages Agent CI`; test selection changes runtime, not the review
+gate.
+
 ## Required Secrets
 
 See `docs/required-secrets-and-variables.md`. The file documents names only,
