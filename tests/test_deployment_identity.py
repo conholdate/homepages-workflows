@@ -100,6 +100,20 @@ class DeploymentIdentityTests(unittest.TestCase):
         )
         self.assertIn('cache_kind="none"', production)
 
+    def test_conholdate_com_qa_resolves_cloudfront_by_exact_alias(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+        qa = workflow.split("conholdate.com:qa)", 1)[1].split(";;", 1)[0]
+        production = workflow.split("conholdate.com:production)", 1)[1].split(";;", 1)[0]
+
+        self.assertIn('cache_kind="cloudfront"', qa)
+        self.assertIn('cache_alias="qa.conholdate.com"', qa)
+        self.assertIn("steps.map.outputs.cache_alias", workflow)
+        self.assertIn("aws cloudfront list-distributions", workflow)
+        self.assertIn('alias in item.get("Aliases", {}).get("Items", [])', workflow)
+        self.assertIn('cache_kind="none"', production)
+
 
 if __name__ == "__main__":
     unittest.main()

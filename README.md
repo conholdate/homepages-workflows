@@ -60,7 +60,8 @@ Inputs:
 - `environment`: `qa` or `production`
 - `ref`: branch, tag, or commit SHA from `conholdate/homepages`
 - `deploy`: set `false` for build-only verification
-- `invalidate_cache`: set `true` to purge CloudFront or BunnyCDN where mapped
+- `invalidate_cache`: set `true` to purge CloudFront or BunnyCDN where mapped;
+  CloudFront mappings use a repository-variable ID or one exact configured alias
 - `transaction_id`: optional Homepages Agent transaction id for publish/rollback
   run correlation
 
