@@ -236,7 +236,8 @@ jobs:
               config="config/config-stage-conholdate-cloud.toml"
               targets="Stage"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront"
+              cache_variable="CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"
               ;;
             conholdate.cloud:production)
               config="config/config-conholdate-cloud.toml"
@@ -381,6 +382,7 @@ jobs:
           ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
+          CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.HOMEPAGES_ACCESS_KEY }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.HOMEPAGES_SECRET_ACCESS }}
           AWS_DEFAULT_REGION: us-east-1

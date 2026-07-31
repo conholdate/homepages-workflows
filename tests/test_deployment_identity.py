@@ -81,6 +81,25 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn("homepages-source/deployment-evidence/homepages-deployment.json", workflow)
         self.assertLess(workflow.index("Write deployment identity"), workflow.index("- name: Deploy\n"))
 
+    def test_conholdate_cloud_qa_uses_its_own_cloudfront_distribution(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+        qa = workflow.split("conholdate.cloud:qa)", 1)[1].split(";;", 1)[0]
+        production = workflow.split("conholdate.cloud:production)", 1)[1].split(";;", 1)[0]
+
+        self.assertIn('cache_kind="cloudfront"', qa)
+        self.assertIn(
+            'cache_variable="CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"',
+            qa,
+        )
+        self.assertIn(
+            "CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: "
+            "${{ vars.CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}",
+            workflow,
+        )
+        self.assertIn('cache_kind="none"', production)
+
 
 if __name__ == "__main__":
     unittest.main()
