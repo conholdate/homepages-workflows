@@ -224,7 +224,8 @@ jobs:
               config="config/config-stage-conholdate-com.toml"
               targets="Stage"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront"
+              cache_alias="qa.conholdate.com"
               ;;
             conholdate.com:production)
               config="config/config-conholdate-com.toml"
@@ -274,6 +275,7 @@ jobs:
             echo "credential_set=$credential_set"
             echo "cache_kind=$cache_kind"
             echo "cache_variable=${cache_variable:-}"
+            echo "cache_alias=${cache_alias:-}"
             echo "cache_url=${cache_url:-}"
           } >> "$GITHUB_OUTPUT"
 
@@ -374,6 +376,7 @@ jobs:
         shell: bash
         env:
           CACHE_VARIABLE: ${{ steps.map.outputs.cache_variable }}
+          CACHE_ALIAS: ${{ steps.map.outputs.cache_alias }}
           ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}
@@ -388,9 +391,14 @@ jobs:
           AWS_DEFAULT_REGION: us-east-1
         run: |
           set -euo pipefail
-          distribution_id="${!CACHE_VARIABLE:-}"
+          distribution_id=""
+          if [ -n "$CACHE_VARIABLE" ]; then
+            distribution_id="${!CACHE_VARIABLE:-}"
+          elif [ -n "$CACHE_ALIAS" ]; then
+            distribution_id="$(aws cloudfront list-distributions --output json | python -c 'import json, os, sys; alias = os.environ["CACHE_ALIAS"]; matches = [item["Id"] for item in json.load(sys.stdin).get("DistributionList", {}).get("Items", []) if alias in item.get("Aliases", {}).get("Items", [])]; len(matches) == 1 or sys.exit(f"Expected one CloudFront distribution for {alias}; found {len(matches)}."); print(matches[0])')"
+          fi
           if [ -z "$distribution_id" ]; then
-            echo "::error::Missing CloudFront repository variable: $CACHE_VARIABLE"
+            echo "::error::CloudFront distribution could not be resolved from variable or alias."
             exit 1
           fi
           if [ -z "${AWS_ACCESS_KEY_ID:-}" ] || [ -z "${AWS_SECRET_ACCESS_KEY:-}" ]; then
