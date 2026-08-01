@@ -59,6 +59,14 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("missing robots noindex", self.workflow)
         self.assertIn('remote_qa_after="$(remote_qa_sha)"', self.workflow)
 
+    def test_active_request_to_qa_candidates_are_not_replaced_by_metrics_refresh(self) -> None:
+        self.assertIn("'refs/heads/homepages-agent/qa-changes/*'", self.workflow)
+        self.assertIn('declare -A preserved_candidates', self.workflow)
+        self.assertIn('preserved_candidates["${site}"]="${current_qa_sha}"', self.workflow)
+        self.assertIn('public_qa_matches_sha "${site}" "${preserved_sha}"', self.workflow)
+        self.assertIn("Verified preserved active QA candidate", self.workflow)
+        self.assertIn("Preserved active QA candidate is missing robots noindex", self.workflow)
+
     def test_manual_qa_only_refresh_does_not_mutate_main(self) -> None:
         self.assertIn(
             "REFRESH_MAIN: ${{ (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.deploy_production) }}",

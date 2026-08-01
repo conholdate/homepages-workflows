@@ -168,12 +168,25 @@ jobs:
           public_qa_matches() {
             local site="$1"
             local cache_key="$2"
+            public_qa_matches_sha "${site}" "${SOURCE_SHA}" "${cache_key}"
+          }
+          public_qa_matches_sha() {
+            local site="$1"
+            local expected_sha="$2"
+            local cache_key="$3"
             local identity
             identity="$(curl -fsS --compressed --max-time 20 \
               "https://qa.${site}/.well-known/homepages-deployment.json?metrics-refresh=${cache_key}" || true)"
-            [ "$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null || true)" = "${SOURCE_SHA}" ] && \
+            [ "$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null || true)" = "${expected_sha}" ] && \
               [ "$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null || true)" = "${site}" ] && \
               [ "$(jq -r '.environment // ""' <<<"${identity}" 2>/dev/null || true)" = "qa" ]
+          }
+          public_qa_source() {
+            local site="$1"
+            local cache_key="$2"
+            curl -fsS --compressed --max-time 20 \
+              "https://qa.${site}/.well-known/homepages-deployment.json?metrics-refresh=${cache_key}" 2>/dev/null | \
+              jq -r '.source_sha // ""' 2>/dev/null || true
           }
           public_qa_has_noindex() {
             local site="$1"
@@ -195,10 +208,22 @@ jobs:
             exit 1
           fi
 
+          candidate_heads="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            ls-remote --heads https://github.com/conholdate/homepages.git \
+            'refs/heads/homepages-agent/qa-changes/*')"
           declare -A run_ids
+          declare -A preserved_candidates
           for site in "${sites[@]}"; do
             if public_qa_matches "${site}" "${GITHUB_RUN_ID}-before-${site//./-}"; then
               echo "QA ${site} already serves ${SOURCE_SHA}; no deploy needed."
+              continue
+            fi
+
+            current_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-candidate-${site//./-}")"
+            candidate_ref="$(awk -v expected="${current_qa_sha}" '$1 == expected { print $2; exit }' <<<"${candidate_heads}")"
+            if [ -n "${candidate_ref}" ]; then
+              preserved_candidates["${site}"]="${current_qa_sha}"
+              echo "QA ${site} is reviewing active candidate ${candidate_ref} at ${current_qa_sha}; preserving it instead of replacing it with the metrics branch."
               continue
             fi
 
@@ -229,6 +254,20 @@ jobs:
           done
 
           for site in "${sites[@]}"; do
+            preserved_sha="${preserved_candidates[$site]:-}"
+            if [ -n "${preserved_sha}" ]; then
+              if ! public_qa_matches_sha "${site}" "${preserved_sha}" "${GITHUB_RUN_ID}-preserved-${site//./-}"; then
+                echo "::error::Active QA candidate changed while metrics refresh was preserving ${site}: expected ${preserved_sha}"
+                exit 1
+              fi
+              if ! public_qa_has_noindex "${site}" "${GITHUB_RUN_ID}-preserved-noindex-${site//./-}"; then
+                echo "::error::Preserved active QA candidate is missing robots noindex for ${site} at ${preserved_sha}"
+                exit 1
+              fi
+              echo "Verified preserved active QA candidate for ${site} at ${preserved_sha}."
+              continue
+            fi
+
             run_id="${run_ids[$site]:-}"
             if [ -n "${run_id}" ]; then
               completed=false
