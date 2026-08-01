@@ -201,7 +201,8 @@ jobs:
               config="config/config-stage-groupdocs-cloud.toml"
               targets="Stage"
               credential_set="standard"
-              cache_kind="none"
+              cache_kind="cloudfront-deploy-account"
+              cache_alias="qa.groupdocs.cloud"
               ;;
             groupdocs.cloud:production)
               config="config/config-groupdocs-cloud.toml"
