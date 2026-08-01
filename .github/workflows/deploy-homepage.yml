@@ -200,7 +200,7 @@ jobs:
             groupdocs.cloud:qa)
               config="config/config-stage-groupdocs-cloud.toml"
               targets="Stage"
-              credential_set="standard"
+              credential_set="sl"
               cache_kind="cloudfront-deploy-account"
               cache_alias="qa.groupdocs.cloud"
               ;;
