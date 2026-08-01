@@ -188,7 +188,8 @@ jobs:
               config="config/config-stage-groupdocs-com.toml"
               targets="Stage"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront-deploy-account"
+              cache_alias="qa.groupdocs.com"
               ;;
             groupdocs.com:production)
               config="config/config-groupdocs-com.toml"
@@ -329,6 +330,10 @@ jobs:
           CEPH_QA_SECRET_ACCESS_KEY: ${{ secrets.CEPH_QA_SECRET_ACCESS_KEY }}
           CEPH_PRODUCTION_ACCESS_KEY_ID: ${{ secrets.CEPH_PRODUCTION_ACCESS_KEY_ID }}
           CEPH_PRODUCTION_SECRET_ACCESS_KEY: ${{ secrets.CEPH_PRODUCTION_SECRET_ACCESS_KEY }}
+          CACHE_KIND: ${{ steps.map.outputs.cache_kind }}
+          CACHE_ALIAS: ${{ steps.map.outputs.cache_alias }}
+          INVALIDATE_CACHE: ${{ inputs.invalidate_cache }}
+          AWS_DEFAULT_REGION: us-east-1
         run: |
           set -euo pipefail
 
@@ -370,6 +375,11 @@ jobs:
           for target in "${target_array[@]}"; do
             hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes -1 --force
           done
+
+          if [ "$INVALIDATE_CACHE" = "true" ] && [ "$CACHE_KIND" = "cloudfront-deploy-account" ]; then
+            distribution_id="$(aws cloudfront list-distributions --output json | python -c 'import json, os, sys; alias = os.environ["CACHE_ALIAS"]; matches = [item["Id"] for item in json.load(sys.stdin).get("DistributionList", {}).get("Items", []) if alias in item.get("Aliases", {}).get("Items", [])]; len(matches) == 1 or sys.exit(f"Expected one CloudFront distribution for {alias}; found {len(matches)}."); print(matches[0])')"
+            aws cloudfront create-invalidation --distribution-id "$distribution_id" --paths "/*"
+          fi
 
       - name: Invalidate CloudFront
         if: ${{ inputs.deploy && inputs.invalidate_cache && steps.map.outputs.cache_kind == 'cloudfront' }}

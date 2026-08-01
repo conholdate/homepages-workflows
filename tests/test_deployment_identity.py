@@ -114,6 +114,19 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('alias in item.get("Aliases", {}).get("Items", [])', workflow)
         self.assertIn('cache_kind="none"', production)
 
+    def test_groupdocs_com_qa_invalidates_cloudfront_with_deploy_credentials(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+        qa = workflow.split("groupdocs.com:qa)", 1)[1].split(";;", 1)[0]
+        production = workflow.split("groupdocs.com:production)", 1)[1].split(";;", 1)[0]
+
+        self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
+        self.assertIn('cache_alias="qa.groupdocs.com"', qa)
+        self.assertIn('CACHE_KIND: ${{ steps.map.outputs.cache_kind }}', workflow)
+        self.assertIn('[ "$CACHE_KIND" = "cloudfront-deploy-account" ]', workflow)
+        self.assertIn('cache_kind="none"', production)
+
 
 if __name__ == "__main__":
     unittest.main()
