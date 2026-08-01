@@ -134,6 +134,7 @@ class DeploymentIdentityTests(unittest.TestCase):
         qa = workflow.split("groupdocs.cloud:qa)", 1)[1].split(";;", 1)[0]
         production = workflow.split("groupdocs.cloud:production)", 1)[1].split(";;", 1)[0]
 
+        self.assertIn('credential_set="sl"', qa)
         self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
         self.assertIn('cache_alias="qa.groupdocs.cloud"', qa)
         self.assertIn('cache_kind="none"', production)
