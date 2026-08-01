@@ -1,149 +1,260 @@
 # Homepages Workflows
 
-## Deployment source identity
+`conholdate/homepages-workflows` is the public GitHub Actions orchestrator for
+Homepages Agent CI, PR review, homepage builds, deployments, scheduled metrics,
+and operational health checks.
 
-`deploy-homepage.yml` resolves the checked-out `conholdate/homepages` commit
-with `git rev-parse HEAD`; the workflow repository commit is never substituted
-for that source identity. Every build writes the versioned, non-secret contract
-to `public/.well-known/homepages-deployment.json` and uploads a byte-identical
-`homepages-deployment.json` run artifact. The public contract contains only the
-source SHA, site, environment, workflow repository/run/attempt, schema/kind,
-and generation timestamp. It deliberately excludes refs supplied by users,
-transaction or approval identifiers, credentials, and deployment-provider
-details.
+This README is the human source of truth for this repository. Files under
+`.github/workflows/` and `.github/scripts/` remain authoritative for exact
+inputs and execution. Treat any disagreement as a defect.
 
-The same static identity file is deployed through Hugo for CloudFront, Ceph,
-BunnyCDN, or any future provider, so Homepages Agent can reconcile without a
-provider-specific control-plane API. A source SHA that predates current
-monorepo `main` is not automatically stale: the agent uses its managed-site
-registry to compare only render inputs relevant to that site.
+## Start Here
 
-Public GitHub Actions orchestrator for homepage build/deploy jobs.
+Normal users should request homepage work through Homepages Agent, Dashboard,
+or WordPress. Those interfaces own authorization, change identity, QA evidence,
+approval, and production confirmation. Do not manually dispatch production to
+bypass that lifecycle.
 
-## Daily metrics refresh
+Repository operators can use GitHub Actions for a controlled build or recovery.
+The safest manual deployment test is build-only:
 
-`Metrics Refresh` runs daily at `02:10 UTC` when repository variable
-`METRICS_REFRESH_CRON_ENABLED=true`. For both `qa-homepages-v1` and `main` it
-first synchronizes `data/products.json` from the fixed
-`https://products.aspose.org/` **Available Now** catalog, then bakes and
-validates metrics for all managed Aspose sites. Its commit scope is restricted
-to `data/products.json` and `data/metrics/*.json`; catalog removals, ambiguous
-GitHub repository evidence, endpoint failures, stale values, validation errors,
-or any unrelated changed path stop the run before commit or deployment.
-
-After each successful refresh, the workflow compares all six public QA
-deployment identities with the exact `qa-homepages-v1` commit. Sites already
-serving that commit are skipped; stale sites are rebuilt, polled to success,
-and verified at the exact QA SHA. This also repairs a stale or partial QA
-rollout when the daily data files themselves did not change.
-
-When `METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true`, a scheduled main metrics
-commit automatically dispatches all six Aspose production homepage rebuilds at
-the exact committed SHA. The workflow correlates and polls every deploy run,
-requires success, verifies each public
-`/.well-known/homepages-deployment.json` identity at that SHA, and confirms
-remote `main` did not drift during the rollout. This is a narrow metrics-only
-automation path; it grants no unattended content, UI, configuration, or theme
-publishing authority.
-
-This repository is intentionally public so GitHub-hosted Actions minutes are
-not consumed from the private `conholdate/homepages` repository. Workflow code
-is public; all credentials must stay in encrypted GitHub Actions secrets.
-
-## Main Workflow
-
-Use **Deploy Homepage** from the Actions tab.
-
-Inputs:
-
-- `site`: homepage domain, for example `aspose.com`
-- `environment`: `qa` or `production`
-- `ref`: branch, tag, or commit SHA from `conholdate/homepages`
-- `deploy`: set `false` for build-only verification
-- `invalidate_cache`: set `true` to purge CloudFront or BunnyCDN where mapped;
-  CloudFront mappings use a repository-variable ID or one exact configured alias
-- `transaction_id`: optional Homepages Agent transaction id for publish/rollback
-  run correlation
-
-Default safe test:
-
-```powershell
-site=aspose.com
-environment=qa
-ref=main
-deploy=false
-invalidate_cache=false
+```text
+Workflow: Deploy Homepage
+site: aspose.com
+environment: qa
+ref: <exact conholdate/homepages commit SHA>
+deploy: false
+invalidate_cache: false
+transaction_id: <empty>
 ```
 
-Deploys are serialized by destination with concurrency group
-`homepage-${{ inputs.site }}-${{ inputs.environment }}`. The source `ref` is
-intentionally not part of the group, so two production deploys for the same site
-cannot write the same destination concurrently.
+## Workflow Catalog
+
+| Workflow | Trigger | Purpose |
+| --- | --- | --- |
+| `deploy-homepage.yml` | Manual | Build or deploy one site/environment from an exact Homepages ref. |
+| `agent-ci.yml` | Manual | Run affected Agent tests and publish the `Homepages Agent CI` commit status. |
+| `agent-pr-autopilot.yml` | Manual | Review, and optionally merge, an Agent PR through the shared guard. |
+| `homepages-pr-autopilot.yml` | Manual | Review, and optionally merge, a Homepages PR through the shared guard. |
+| `guarded-pr-autopilot.yml` | Reusable call | Shared implementation used by both PR wrappers. |
+| `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose product/metric data and synchronize approved deployments. |
+| `homepages-agent-heartbeat.yml` | Every hour at `:07` and `:37` UTC/manual | Produce Aspose coordination, validation, readiness, and metric evidence. |
+| `homepages-agent-menu-health.yml` | Daily at `03:17` UTC/manual | Refresh and commit Agent menu-health reports. |
+| `workflow-lint.yml` | Workflow/script PR or main push/manual | Run `actionlint`, `shellcheck`, and the deployment concurrency contract test. |
+
+All schedules use UTC.
+
+## Deploy Homepage
+
+`deploy-homepage.yml` accepts:
+
+| Input | Meaning | Default |
+| --- | --- | --- |
+| `site` | One listed homepage domain. | Required |
+| `environment` | `qa` or `production`. | Required |
+| `ref` | Branch, tag, or SHA in `conholdate/homepages`. Prefer an exact SHA. | `main` |
+| `deploy` | Publish after the build. | `false` |
+| `invalidate_cache` | Purge the mapped CloudFront or BunnyCDN cache after publish. | `false` |
+| `transaction_id` | Optional Agent correlation ID for publish or rollback. | Empty |
+
+Supported workflow choices are:
+
+- Aspose: `aspose.com`, `aspose.cloud`, `aspose.app`, `aspose.ai`,
+  `aspose.net`, and `aspose.org`;
+- GroupDocs: `groupdocs.com`, `groupdocs.cloud`, and `groupdocs.app`;
+- Conholdate: `conholdate.com`, `conholdate.cloud`, and `conholdate.app`.
+
+A choice in this workflow means a build/deploy mapping exists. It does not by
+itself mean that the site is fully onboarded or available to ordinary Agent
+users; that status comes from the Homepages site manifest.
+
+### Execution Contract
+
+The workflow:
+
+1. checks out this repository for workflow support;
+2. checks out the requested `conholdate/homepages` ref;
+3. resolves the checkout to an exact source SHA;
+4. selects the site/environment config, target, credentials, and cache mapping;
+5. installs Hugo Extended `0.162.0` and builds the site;
+6. writes and uploads deployment identity evidence;
+7. deploys only when `deploy=true`;
+8. invalidates mapped cache only when requested.
+
+The central deploy workflow currently builds every listed site with Hugo
+Extended `0.162.0`. Repository-owned legacy workflows may use different pins;
+consult the actual workflow selected for the operation.
+
+Deploys are serialized by destination:
+
+```text
+homepage-<site>-<environment>
+```
+
+The source ref is intentionally absent from the concurrency group, so two runs
+cannot write the same site/environment destination concurrently.
+
+### Deployment Identity
+
+Every build writes:
+
+```text
+public/.well-known/homepages-deployment.json
+```
+
+The same byte-identical file is uploaded as a run artifact. It records only the
+source SHA, site, environment, workflow repository/run/attempt, schema/kind, and
+generation time. It excludes credentials, provider details, approval IDs, and
+user-supplied refs.
+
+Homepages Agent uses this public identity to verify the exact deployed source
+without depending on a provider-specific API.
+
+## QA And Production Safety
+
+- `deploy=false` is the default.
+- QA and production use separate serialized destinations.
+- Production jobs use the GitHub environment named `production`.
+- Configure required production environment reviewers before production use.
+- Use an exact reviewed Homepages SHA for governed QA and production work.
+- Production must promote the exact approved QA version through Homepages
+  Agent; a manual workflow dispatch is an operator recovery path.
+- Cache invalidation is explicit and mapped per site/provider.
+- Never print tokens, credentials, private keys, or signed URLs.
 
 ## Metrics Refresh
 
-Use **Metrics Refresh** from the Actions tab to refresh baked Aspose metrics.
-The workflow checks out `conholdate/homepages-agent` and `conholdate/homepages`,
-runs catalog sync plus data-only all-site metric bake, validates the refreshed
-metrics, and commits only `data/products.json` and flat
-`data/metrics/*.json` paths when values changed. It updates both
-`qa-homepages-v1` and `main` with the commit message
-`Refresh baked metrics (scheduled)`.
+`metrics-refresh.yml` is limited to the six Aspose sites. Its schedule is:
 
-The QA and main metrics commits are a narrow data-only exception lane. A
-workflow guard hard-fails if any worktree path is outside
-`data/products.json` or flat `data/metrics/*.json`.
+```text
+01:20 UTC and 13:20 UTC every day
+```
 
-The workflow runs at `01:20` and `13:20 UTC`, after the common 12-hour
-intersection of the upstream metrics collection schedules. Scheduled mutation
-remains disabled unless `METRICS_REFRESH_CRON_ENABLED=true`. QA synchronization follows
-every enabled successful refresh and skips exact current deployments.
-Production deploy dispatches are separately gated: manual runs require
-the `deploy_production` input, and scheduled runs require
-`METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true`. When enabled and a main metrics
-commit was created, the workflow dispatches `deploy-homepage.yml` for the six
-Aspose production sites at `ref=main`; no deploy is dispatched when there are no
-metric changes.
+Scheduled execution is skipped unless:
 
-A manual run with `deploy_production=false` is QA-only: it refreshes and
-synchronizes `qa-homepages-v1` but leaves `main` unchanged. Scheduled runs
-refresh `main` only when the production-deploy repository variable is enabled;
-manual runs do so only with `deploy_production=true`. Both use the production
-gate above.
+```text
+METRICS_REFRESH_CRON_ENABLED=true
+```
 
-## Safety Rules
+The workflow refreshes `qa-homepages-v1` first. It synchronizes
+`data/products.json` from the fixed Aspose Available Now catalog, bakes metrics,
+validates all six Aspose sites, and permits commits only to:
 
-- Homepage deployment workflows are `workflow_dispatch` only; Metrics Refresh
-  also has the documented daily schedule.
-- The source repository is checked out with `HOMEPAGES_SOURCE_PAT`.
-- Production jobs use the GitHub environment named `production`.
-- Do not echo secrets, credentials, tokens, or signed URLs in workflow steps.
-- Add production environment reviewers before using production deployment.
+- `data/products.json`;
+- flat files under `data/metrics/*.json`.
 
-## Guarded PR Autopilot
+Catalog removals, ambiguous repository evidence, fetch errors, stale values,
+validation failures, or unrelated changed paths stop the run.
 
-Use **Homepages Agent PR Autopilot** for `conholdate/homepages-agent` PRs and
-**Homepages Theme PR Autopilot** for shared-theme PRs in
-`conholdate/homepages`.
+After a successful refresh, public QA is reconciled to the exact QA commit.
+Sites already serving that SHA are skipped; stale sites are deployed and then
+verified for exact identity and `noindex`.
 
-Both wrappers call the same reusable guarded workflow. The only differences are
-the target repository, commit-status context, and encrypted PAT secret binding.
-The agent still enforces semantic review approval, required co-author trailers,
-the pinned PR head SHA, and the repository-specific merge policy.
-The homepages wrapper uses the encrypted `HOMEPAGES_REPOS_PAT` secret; the agent
-wrapper continues to use `AGENT_REPO_PAT`.
+### Production Metrics Gate
 
-## Homepages Agent CI
+A manual run updates `main` and production only when
+`deploy_production=true`. A scheduled run does so only when:
 
-`agent-ci.yml` checks out the requested exact Homepages Agent ref, compiles the
-source and tests, and lets the Agent select tests from the changed Python
-module dependency graph. Documentation-only changes run the documentation
-contract tests. Unknown paths, shared build/workflow infrastructure, or a broad
-affected set fall back to the complete suite. The resulting commit status
-remains `Homepages Agent CI`; test selection changes runtime, not the review
-gate.
+```text
+METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true
+```
 
-## Required Secrets
+When a main metrics commit is created, the workflow dispatches all six Aspose
+production deployments at the exact commit, waits for every run, verifies every
+public identity, and confirms `main` did not move during the rollout. No metrics
+change means no production deployment.
 
-See `docs/required-secrets-and-variables.md`. The file documents names only,
-not values.
+This exception lane grants no unattended content, UI, config, theme, GroupDocs,
+or Conholdate publishing authority.
+
+## Agent CI And PR Review
+
+### Homepages Agent CI
+
+`agent-ci.yml` checks out the requested exact Agent ref, compiles source/tests,
+and lets the Agent select the smallest test profile from the changed dependency
+graph. Playwright is installed only when selected tests need it. Unknown/shared
+paths fall back to the complete suite.
+
+The workflow posts the `Homepages Agent CI` status to the exact Agent commit.
+
+### Guarded PR Autopilot
+
+The two public wrappers call `guarded-pr-autopilot.yml`:
+
+- `agent-pr-autopilot.yml` targets `conholdate/homepages-agent`;
+- `homepages-pr-autopilot.yml` targets `conholdate/homepages`.
+
+Both resolve the PR head, post a repository-specific pending status, check out
+an exact Agent ref, prepare the GitHub App review identity, and run the Agent's
+policy-gated autopilot. `apply=false` is the default. The Agent still decides
+whether the exact head is reviewable or mergeable.
+
+## Operational Health
+
+### Heartbeat
+
+`homepages-agent-heartbeat.yml` runs at `:07` and `:37` each hour. It checks the
+configured QA source, runs all-Aspose staging validation/readiness/metrics
+evidence, and uploads the reports. Individual evidence commands continue far
+enough to produce a useful combined summary when one check fails.
+
+### Menu Health
+
+`homepages-agent-menu-health.yml` runs daily at `03:17` UTC. It checks all
+managed Aspose menus, uploads the reports, and commits changed menu-health
+reports to Agent `main` with required co-author trailers.
+
+Manual heartbeat or menu-health runs may override the Agent ref and Homepages
+QA ref. Scheduled runs default the Agent to `main` and use repository variable
+`HOMEPAGES_QA_SOURCE_REF`, falling back to `qa-homepages-v1`.
+
+## Required Configuration
+
+Store values only in GitHub encrypted secrets or repository/environment
+variables. Never commit values to this public repository.
+
+### Secrets
+
+| Purpose | Names |
+| --- | --- |
+| Source checkout, Agent CI, and Agent PR operations | `HOMEPAGES_SOURCE_PAT` |
+| Homepages PR operations | `HOMEPAGES_REPOS_PAT` |
+| Review reasoning | `PROFESSIONALIZE_API_SERVICE_KEY`, `PROFESSIONALIZE_BASE_URL` |
+| Independent GitHub App review | `HOMEPAGES_REVIEW_APP_ID`, `HOMEPAGES_REVIEW_APP_INSTALLATION_ID`, `HOMEPAGES_REVIEW_APP_PRIVATE_KEY` |
+| S3-style deployment | `ACCESS_KEY_SL`, `SECRET_ACCESS_SL`, `ACCESS_KEY`, `SECRET_ACCESS`, `HOMEPAGES_ACCESS_KEY`, `HOMEPAGES_SECRET_ACCESS` |
+| Ceph deployment | `CEPH_QA_ACCESS_KEY_ID`, `CEPH_QA_SECRET_ACCESS_KEY`, `CEPH_PRODUCTION_ACCESS_KEY_ID`, `CEPH_PRODUCTION_SECRET_ACCESS_KEY` |
+| BunnyCDN purge | `BUNNY_API_KEY` |
+
+### Variables
+
+- `HOMEPAGES_QA_SOURCE_REF`;
+- `METRICS_REFRESH_CRON_ENABLED`;
+- `METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED`;
+- `ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_CLOUD_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_APP_QA_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID`;
+- `ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID`;
+- `CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID`.
+
+## Validation And Contribution
+
+`workflow-lint.yml` runs when workflow or workflow-script paths change on a PR
+or on `main`, and it can be dispatched manually. It executes:
+
+- `actionlint` for `.github/workflows/*.yml`;
+- `shellcheck` for `.github/scripts/*.sh`;
+- `.github/scripts/test-deploy-homepage-concurrency.sh`.
+
+For Agent-assisted changes:
+
+- start from current `origin/main`;
+- use a `codex/` branch;
+- preserve required co-author trailers;
+- run focused local syntax/contract checks;
+- dispatch one final-head CI/review path;
+- never include secret values in commits, logs, PRs, or screenshots.
