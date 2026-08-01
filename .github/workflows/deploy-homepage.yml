@@ -98,6 +98,7 @@ jobs:
 
           site="${{ inputs.site }}"
           environment="${{ inputs.environment }}"
+          cache_credential_set="homepages"
 
           case "${site}:${environment}" in
             aspose.com:qa)
@@ -188,7 +189,9 @@ jobs:
               config="config/config-stage-groupdocs-com.toml"
               targets="Stage"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront"
+              cache_alias="qa.groupdocs.com"
+              cache_credential_set="sl"
               ;;
             groupdocs.com:production)
               config="config/config-groupdocs-com.toml"
@@ -277,6 +280,7 @@ jobs:
             echo "cache_variable=${cache_variable:-}"
             echo "cache_alias=${cache_alias:-}"
             echo "cache_url=${cache_url:-}"
+            echo "cache_credential_set=$cache_credential_set"
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup Hugo
@@ -377,6 +381,7 @@ jobs:
         env:
           CACHE_VARIABLE: ${{ steps.map.outputs.cache_variable }}
           CACHE_ALIAS: ${{ steps.map.outputs.cache_alias }}
+          CACHE_CREDENTIAL_SET: ${{ steps.map.outputs.cache_credential_set }}
           ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}
@@ -386,11 +391,27 @@ jobs:
           ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID }}
           ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID }}
           CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: ${{ vars.CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.HOMEPAGES_ACCESS_KEY }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.HOMEPAGES_SECRET_ACCESS }}
+          ACCESS_KEY_SL: ${{ secrets.ACCESS_KEY_SL }}
+          SECRET_ACCESS_SL: ${{ secrets.SECRET_ACCESS_SL }}
+          HOMEPAGES_ACCESS_KEY: ${{ secrets.HOMEPAGES_ACCESS_KEY }}
+          HOMEPAGES_SECRET_ACCESS_KEY: ${{ secrets.HOMEPAGES_SECRET_ACCESS }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
           set -euo pipefail
+          case "$CACHE_CREDENTIAL_SET" in
+            sl)
+              export AWS_ACCESS_KEY_ID="$ACCESS_KEY_SL"
+              export AWS_SECRET_ACCESS_KEY="$SECRET_ACCESS_SL"
+              ;;
+            homepages)
+              export AWS_ACCESS_KEY_ID="$HOMEPAGES_ACCESS_KEY"
+              export AWS_SECRET_ACCESS_KEY="$HOMEPAGES_SECRET_ACCESS_KEY"
+              ;;
+            *)
+              echo "::error::Unsupported CloudFront credential set."
+              exit 1
+              ;;
+          esac
           distribution_id=""
           if [ -n "$CACHE_VARIABLE" ]; then
             distribution_id="${!CACHE_VARIABLE:-}"
