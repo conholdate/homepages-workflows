@@ -38,6 +38,7 @@ transaction_id: <empty>
 | `homepages-pr-autopilot.yml` | Manual | Review, and optionally merge, a Homepages PR through the shared guard. |
 | `guarded-pr-autopilot.yml` | Reusable call | Shared implementation used by both PR wrappers. |
 | `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose product/metric data and synchronize approved deployments. |
+| `groupdocs-data-refresh.yml` | Schedule/manual | Bake one GroupDocs site's metrics and blog data, then refresh only its QA homepage. |
 | `homepages-agent-heartbeat.yml` | Every hour at `:07` and `:37` UTC/manual | Produce Aspose coordination, validation, readiness, and metric evidence. |
 | `homepages-agent-menu-health.yml` | Daily at `03:17` UTC/manual | Refresh and commit Agent menu-health reports. |
 | `workflow-lint.yml` | Workflow/script PR or main push/manual | Run `actionlint`, `shellcheck`, and the deployment concurrency contract test. |
@@ -166,6 +167,22 @@ change means no production deployment.
 
 This exception lane grants no unattended content, UI, config, theme, GroupDocs,
 or Conholdate publishing authority.
+
+## GroupDocs Data Refresh
+
+`groupdocs-data-refresh.yml` runs 20 minutes after each supplied upstream
+GroupDocs metrics schedule:
+
+| Site | Refresh times (UTC) | Baked data |
+| --- | --- | --- |
+| `groupdocs.com` | `01:10`, then every 3 hours | Total Downloads and latest blog posts |
+| `groupdocs.cloud` | `00:20`, then every 3 hours | Downloads and latest blog posts |
+| `groupdocs.app` | `01:15`, then every 4 hours | Data Processed |
+
+Schedules run only when `GROUPDOCS_DATA_REFRESH_CRON_ENABLED=true`. Each run
+fetches one site's approved endpoint once, commits only that site's registered
+data files, and deploys only that QA homepage. It preserves an active
+Request-to-QA candidate and never deploys production.
 
 ## Agent CI And PR Review
 
