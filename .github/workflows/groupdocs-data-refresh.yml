@@ -1,0 +1,197 @@
+name: GroupDocs Data Refresh
+
+on:
+  schedule:
+    - cron: "10 1,4,7,10,13,16,19,22 * * *"
+    - cron: "20 0,3,6,9,12,15,18,21 * * *"
+    - cron: "15 1,5,9,13,17,21 * * *"
+  workflow_dispatch:
+    inputs:
+      site:
+        description: GroupDocs homepage to refresh
+        required: true
+        type: choice
+        default: groupdocs.com
+        options:
+          - groupdocs.com
+          - groupdocs.cloud
+          - groupdocs.app
+      agent_ref:
+        description: Branch, tag, or SHA in conholdate/homepages-agent
+        required: false
+        default: main
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: groupdocs-data-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    if: ${{ github.event_name != 'schedule' || vars.GROUPDOCS_DATA_REFRESH_CRON_ENABLED == 'true' }}
+    env:
+      HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
+      HOMEPAGES_QA_SOURCE_REF: qa-homepages-v1
+      HOMEPAGES_SOURCE_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+      GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: workflows
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages-agent
+          ref: ${{ inputs.agent_ref || 'main' }}
+          token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+          path: homepages-agent
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: conholdate/homepages
+          ref: qa-homepages-v1
+          token: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+          path: homepages
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Homepages Agent
+        working-directory: homepages-agent
+        run: python -m pip install -e .
+
+      - name: Select scheduled site
+        id: select
+        shell: bash
+        env:
+          MANUAL_SITE: ${{ inputs.site }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          case "${SCHEDULE}" in
+            "10 1,4,7,10,13,16,19,22 * * *") site="groupdocs.com" ;;
+            "20 0,3,6,9,12,15,18,21 * * *") site="groupdocs.cloud" ;;
+            "15 1,5,9,13,17,21 * * *") site="groupdocs.app" ;;
+            "") site="${MANUAL_SITE}" ;;
+            *) echo "::error::Unknown schedule ${SCHEDULE}"; exit 1 ;;
+          esac
+          echo "site=${site}" >> "${GITHUB_OUTPUT}"
+
+      - name: Bake and commit changed data
+        id: bake
+        shell: bash
+        env:
+          SITE: ${{ steps.select.outputs.site }}
+          GIT_AUTHOR_NAME: Homepages Agent
+          GIT_AUTHOR_EMAIL: homepages.agent@conholdate.com
+          GIT_COMMITTER_NAME: Homepages Agent
+          GIT_COMMITTER_EMAIL: homepages.agent@conholdate.com
+        run: |
+          set -euo pipefail
+          if [ -z "${HOMEPAGES_SOURCE_PAT:-}" ]; then
+            echo "::error::Missing HOMEPAGES_SOURCE_PAT"
+            exit 1
+          fi
+
+          auth_header="$(printf 'x-access-token:%s' "${HOMEPAGES_SOURCE_PAT}" | base64 -w0)"
+          repo="${GITHUB_WORKSPACE}/homepages"
+          agent="${GITHUB_WORKSPACE}/homepages-agent"
+          key="${SITE//./_}"
+          metric_path="data/metrics/${SITE}.json"
+          feed_path="data/homepage_resource_feeds/${key}.json"
+
+          cd "${repo}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            fetch origin "+refs/heads/${HOMEPAGES_QA_SOURCE_REF}:refs/remotes/origin/${HOMEPAGES_QA_SOURCE_REF}"
+          git checkout -B "${HOMEPAGES_QA_SOURCE_REF}" "origin/${HOMEPAGES_QA_SOURCE_REF}"
+          before_sha="$(git rev-parse HEAD)"
+
+          (cd "${agent}" && python -m homepages_agent --homepages-repo "${repo}" \
+            metrics-bake --site "${SITE}" --apply --skip-source-label-sync)
+          paths=("${metric_path}")
+          if [ "${SITE}" != "groupdocs.app" ] && [ -f "${feed_path}" ]; then
+            (cd "${agent}" && python -m homepages_agent --homepages-repo "${repo}" \
+              resource-feed-bake --feed "${key}" --apply --timeout 30)
+            paths+=("${feed_path}")
+          fi
+
+          git add -- "${paths[@]}"
+          unexpected="$(git diff --cached --name-only | grep -Ev '^data/metrics/groupdocs\.(com|cloud|app)\.json$|^data/homepage_resource_feeds/groupdocs_(com|cloud)\.json$' || true)"
+          if [ -n "${unexpected}" ]; then
+            echo "::error::Refresh changed an unapproved path: ${unexpected}"
+            exit 1
+          fi
+          if git diff --cached --quiet; then
+            echo "changed=false" >> "${GITHUB_OUTPUT}"
+            echo "source_sha=${before_sha}" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+
+          git commit \
+            -m "Refresh ${SITE} baked homepage data" \
+            -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
+            -m "Co-authored-by: Codex <codex@openai.com>" \
+            -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            push origin "HEAD:${HOMEPAGES_QA_SOURCE_REF}"
+          echo "changed=true" >> "${GITHUB_OUTPUT}"
+          echo "source_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy changed QA homepage
+        if: ${{ steps.bake.outputs.changed == 'true' }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SITE: ${{ steps.select.outputs.site }}
+          SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          auth_header="$(printf 'x-access-token:%s' "${HOMEPAGES_SOURCE_PAT}" | base64 -w0)"
+          identity_url="https://qa.${SITE}/.well-known/homepages-deployment.json"
+          current_sha="$(curl -fsS --compressed --max-time 20 "${identity_url}?before=${GITHUB_RUN_ID}" | jq -r '.source_sha // ""')"
+          candidate="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            ls-remote --heads https://github.com/conholdate/homepages.git 'refs/heads/homepages-agent/qa-changes/*' | \
+            awk -v expected="${current_sha}" '$1 == expected { print $2; exit }')"
+          if [ -n "${candidate}" ]; then
+            echo "Preserving active QA candidate ${candidate} at ${current_sha}."
+            exit 0
+          fi
+
+          transaction_id="groupdocs-data-${GITHUB_RUN_ID}-${SITE//./-}"
+          gh workflow run deploy-homepage.yml --repo "${GITHUB_REPOSITORY}" --ref main \
+            -f "site=${SITE}" -f "environment=qa" -f "ref=${SOURCE_SHA}" \
+            -f "deploy=true" -f "invalidate_cache=true" -f "transaction_id=${transaction_id}"
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/deploy-homepage.yml/runs?event=workflow_dispatch&per_page=100" | \
+              jq -r --arg marker "tx=${transaction_id}" '.workflow_runs | map(select(.display_title | contains($marker))) | sort_by(.created_at) | last | .id // empty')"
+            [ -n "${run_id}" ] && break
+            sleep 2
+          done
+          [ -n "${run_id}" ] || { echo "::error::Could not discover QA deploy run"; exit 1; }
+          gh run watch "${run_id}" --repo "${GITHUB_REPOSITORY}" --exit-status
+
+          for attempt in $(seq 1 20); do
+            identity="$(curl -fsS --compressed --max-time 20 "${identity_url}?verify=${GITHUB_RUN_ID}-${attempt}" || true)"
+            html="$(curl -fsS --compressed --max-time 20 "https://qa.${SITE}/?verify=${GITHUB_RUN_ID}-${attempt}" || true)"
+            if [ "$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null)" = "${SOURCE_SHA}" ] && \
+               [ "$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null)" = "${SITE}" ] && \
+               grep -Eiq '<meta[^>]*name="?robots"?[^>]*content="?[^>]*noindex' <<<"${html}"; then
+              echo "Verified QA ${SITE} at ${SOURCE_SHA}."
+              exit 0
+            fi
+            sleep 6
+          done
+          echo "::error::QA did not expose exact refreshed identity and noindex"
+          exit 1
