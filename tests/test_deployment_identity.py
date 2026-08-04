@@ -114,7 +114,7 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('alias in item.get("Aliases", {}).get("Items", [])', workflow)
         self.assertIn('cache_kind="none"', production)
 
-    def test_groupdocs_com_qa_invalidates_cloudfront_with_deploy_credentials(self) -> None:
+    def test_groupdocs_com_qa_and_production_invalidate_cloudfront_with_deploy_credentials(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
@@ -125,9 +125,10 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('cache_alias="qa.groupdocs.com"', qa)
         self.assertIn('CACHE_KIND: ${{ steps.map.outputs.cache_kind }}', workflow)
         self.assertIn('[ "$CACHE_KIND" = "cloudfront-deploy-account" ]', workflow)
-        self.assertIn('cache_kind="none"', production)
+        self.assertIn('cache_kind="cloudfront-deploy-account"', production)
+        self.assertIn('cache_alias="www.groupdocs.com"', production)
 
-    def test_groupdocs_cloud_qa_invalidates_cloudfront_with_deploy_credentials(self) -> None:
+    def test_groupdocs_cloud_preserves_legacy_production_hugo_and_invalidates_cloudfront(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
@@ -137,9 +138,11 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('credential_set="sl"', qa)
         self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
         self.assertIn('cache_alias="qa.groupdocs.cloud"', qa)
-        self.assertIn('cache_kind="none"', production)
+        self.assertIn('cache_kind="cloudfront-deploy-account"', production)
+        self.assertIn('cache_alias="www.groupdocs.cloud"', production)
+        self.assertIn('hugo_version="0.101.0"', production)
 
-    def test_groupdocs_app_qa_invalidates_cloudfront_with_deploy_credentials(self) -> None:
+    def test_groupdocs_app_preserves_legacy_production_hugo_and_invalidates_cloudfront(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
@@ -149,7 +152,18 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('credential_set="sl"', qa)
         self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
         self.assertIn('cache_alias="qa.groupdocs.app"', qa)
-        self.assertIn('cache_kind="none"', production)
+        self.assertIn('cache_kind="cloudfront-deploy-account"', production)
+        self.assertIn('cache_alias="www.groupdocs.app"', production)
+        self.assertIn('hugo_version="0.161.1"', production)
+
+    def test_deploy_workflow_uses_resolved_site_hugo_version(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn('hugo_version="0.162.0"', workflow)
+        self.assertIn('echo "hugo_version=$hugo_version"', workflow)
+        self.assertIn('HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}', workflow)
 
 
 if __name__ == "__main__":
