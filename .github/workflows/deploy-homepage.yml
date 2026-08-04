@@ -294,7 +294,10 @@ jobs:
           HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}
         run: |
           set -euo pipefail
-          curl -fsSL -o /tmp/hugo.tar.gz "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz"
+          release_root="https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}"
+          if ! curl -fsSL -o /tmp/hugo.tar.gz "${release_root}/hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz"; then
+            curl -fsSL -o /tmp/hugo.tar.gz "${release_root}/hugo_extended_${HUGO_VERSION}_Linux-64bit.tar.gz"
+          fi
           tar -xzf /tmp/hugo.tar.gz -C /tmp hugo
           sudo mv /tmp/hugo /usr/local/bin/hugo
           hugo version
