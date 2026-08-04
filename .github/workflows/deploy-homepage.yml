@@ -98,6 +98,7 @@ jobs:
 
           site="${{ inputs.site }}"
           environment="${{ inputs.environment }}"
+          hugo_version="0.162.0"
 
           case "${site}:${environment}" in
             aspose.com:qa)
@@ -195,7 +196,8 @@ jobs:
               config="config/config-groupdocs-com.toml"
               targets="Production"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront-deploy-account"
+              cache_alias="www.groupdocs.com"
               ;;
             groupdocs.cloud:qa)
               config="config/config-stage-groupdocs-cloud.toml"
@@ -208,7 +210,9 @@ jobs:
               config="config/config-groupdocs-cloud.toml"
               targets="Production"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront-deploy-account"
+              cache_alias="www.groupdocs.cloud"
+              hugo_version="0.101.0"
               ;;
             groupdocs.app:qa)
               config="config/config-stage-groupdocs-app.toml"
@@ -221,7 +225,9 @@ jobs:
               config="config/config-groupdocs-app.toml"
               targets="Production"
               credential_set="sl"
-              cache_kind="none"
+              cache_kind="cloudfront-deploy-account"
+              cache_alias="www.groupdocs.app"
+              hugo_version="0.161.1"
               ;;
             conholdate.com:qa)
               config="config/config-stage-conholdate-com.toml"
@@ -280,11 +286,12 @@ jobs:
             echo "cache_variable=${cache_variable:-}"
             echo "cache_alias=${cache_alias:-}"
             echo "cache_url=${cache_url:-}"
+            echo "hugo_version=$hugo_version"
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup Hugo
         env:
-          HUGO_VERSION: 0.162.0
+          HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}
         run: |
           set -euo pipefail
           curl -fsSL -o /tmp/hugo.tar.gz "https://github.com/gohugoio/hugo/releases/download/v${HUGO_VERSION}/hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz"
