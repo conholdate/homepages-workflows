@@ -164,6 +164,8 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('hugo_version="0.162.0"', workflow)
         self.assertIn('echo "hugo_version=$hugo_version"', workflow)
         self.assertIn('HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}', workflow)
+        self.assertIn('hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz', workflow)
+        self.assertIn('hugo_extended_${HUGO_VERSION}_Linux-64bit.tar.gz', workflow)
 
 
 if __name__ == "__main__":
