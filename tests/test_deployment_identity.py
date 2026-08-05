@@ -14,6 +14,12 @@ assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
 
+PUBLISH_SCRIPT = ROOT / ".github" / "scripts" / "publish_deployment_identity.py"
+PUBLISH_SPEC = importlib.util.spec_from_file_location("publish_deployment_identity", PUBLISH_SCRIPT)
+assert PUBLISH_SPEC and PUBLISH_SPEC.loader
+PUBLISH_MODULE = importlib.util.module_from_spec(PUBLISH_SPEC)
+PUBLISH_SPEC.loader.exec_module(PUBLISH_MODULE)
+
 
 class DeploymentIdentityTests(unittest.TestCase):
     def test_public_identity_is_minimal_versioned_and_non_secret(self) -> None:
@@ -80,6 +86,59 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn("actions/upload-artifact@v4", workflow)
         self.assertIn("homepages-source/deployment-evidence/homepages-deployment.json", workflow)
         self.assertLess(workflow.index("Write deployment identity"), workflow.index("- name: Deploy\n"))
+        deploy = workflow.split('- name: Deploy\n', 1)[1]
+        self.assertIn("publish_deployment_identity.py", deploy)
+        self.assertLess(deploy.index("hugo --config"), deploy.index("publish_deployment_identity.py"))
+        self.assertLess(deploy.index("publish_deployment_identity.py"), deploy.index("create-invalidation"))
+
+    def test_hidden_identity_upload_uses_exact_s3_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text(
+                '[[deployment.targets]]\nname = "Production"\n'
+                'URL = "s3://www.groupdocs.com/site/?region=us-west-2"\n',
+                encoding="utf-8",
+            )
+            command = PUBLISH_MODULE.upload_command(
+                config=config,
+                target_name="Production",
+                identity=Path("public/.well-known/homepages-deployment.json"),
+            )
+        self.assertEqual(command[:3], ["aws", "s3", "cp"])
+        self.assertEqual(Path(command[3]).as_posix(), "public/.well-known/homepages-deployment.json")
+        self.assertIn("s3://www.groupdocs.com/site/.well-known/homepages-deployment.json", command)
+        self.assertEqual(command[-2:], ["--region", "us-west-2"])
+
+    def test_hidden_identity_upload_preserves_registered_ceph_endpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text(
+                '[[deployment.targets]]\nname = "production_ceph"\n'
+                'URL = "s3://www-aspose-org/?endpoint=https://s3.dynabic.com&region=us-east-1"\n',
+                encoding="utf-8",
+            )
+            command = PUBLISH_MODULE.upload_command(
+                config=config,
+                target_name="production_ceph",
+                identity=Path("identity.json"),
+            )
+        self.assertIn("s3://www-aspose-org/.well-known/homepages-deployment.json", command)
+        self.assertIn("--endpoint-url", command)
+        self.assertIn("https://s3.dynabic.com", command)
+
+    def test_hidden_identity_upload_rejects_ambiguous_or_non_s3_target(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = Path(tmp) / "config.toml"
+            config.write_text(
+                '[[deployment.targets]]\nname = "Production"\nURL = "gs://example/"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "s3 target"):
+                PUBLISH_MODULE.upload_command(
+                    config=config,
+                    target_name="Production",
+                    identity=Path("identity.json"),
+                )
 
     def test_conholdate_cloud_qa_uses_its_own_cloudfront_distribution(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(

@@ -79,7 +79,8 @@ The workflow:
 4. selects the site/environment config, target, credentials, and cache mapping;
 5. installs Hugo Extended `0.162.0` and builds the site;
 6. writes and uploads deployment identity evidence;
-7. deploys only when `deploy=true`;
+7. deploys only when `deploy=true` and explicitly publishes the hidden
+   `.well-known` identity file to every selected S3 target;
 8. invalidates mapped cache only when requested.
 
 The central deploy workflow currently builds every listed site with Hugo
@@ -110,6 +111,11 @@ user-supplied refs.
 
 Homepages Agent uses this public identity to verify the exact deployed source
 without depending on a provider-specific API.
+
+Hugo deployment excludes hidden paths, so the shared workflow uploads this
+single generated JSON file explicitly after each successful Hugo target deploy
+and before cache invalidation. The upload uses only the selected committed
+deployment target; it does not broaden the homepage file scope.
 
 ## QA And Production Safety
 
