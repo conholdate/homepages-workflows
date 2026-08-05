@@ -7,7 +7,7 @@ import tomllib
 from urllib.parse import parse_qs, urlsplit
 
 
-PUBLIC_IDENTITY_KEY = ".well-known/homepages-deployment.json"
+PUBLIC_IDENTITY_PATH = ".well-known/homepages-deployment.json"
 
 
 def upload_command(*, config: Path, target_name: str, identity: Path) -> list[str]:
@@ -32,7 +32,7 @@ def upload_command(*, config: Path, target_name: str, identity: Path) -> list[st
         raise ValueError("Unsupported deployment target query fields: " + ", ".join(unknown))
 
     prefix = parsed.path.strip("/")
-    key = "/".join(part for part in (prefix, PUBLIC_IDENTITY_KEY) if part)
+    key = "/".join(part for part in (prefix, PUBLIC_IDENTITY_PATH) if part)
     command = [
         "aws",
         "s3",
