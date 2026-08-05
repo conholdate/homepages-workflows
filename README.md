@@ -181,8 +181,11 @@ GroupDocs metrics schedule:
 
 Schedules run only when `GROUPDOCS_DATA_REFRESH_CRON_ENABLED=true`. Each run
 fetches one site's approved endpoint once, commits only that site's registered
-data files, and deploys only that QA homepage. It preserves an active
-Request-to-QA candidate and never deploys production.
+data files, and deploys only that QA homepage. When that homepage has an active
+Request-to-QA candidate, the workflow copies only the selected site's generated
+metrics/resource-feed files onto that exact candidate branch and redeploys it;
+authored content and renderer files remain unchanged. It never deploys
+production.
 
 ## Agent CI And PR Review
 

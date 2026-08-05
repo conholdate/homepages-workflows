@@ -127,14 +127,22 @@ jobs:
           fi
 
           git add -- "${paths[@]}"
-          unexpected="$(git diff --cached --name-only | grep -Ev '^data/metrics/groupdocs\.(com|cloud|app)\.json$|^data/homepage_resource_feeds/groupdocs_(com|cloud)\.json$' || true)"
+          unexpected="$(git diff --cached --name-only | while read -r changed_path; do
+            case "${changed_path}" in
+              "${metric_path}"|"${feed_path}") ;;
+              *) echo "${changed_path}" ;;
+            esac
+          done)"
           if [ -n "${unexpected}" ]; then
             echo "::error::Refresh changed an unapproved path: ${unexpected}"
             exit 1
           fi
           if git diff --cached --quiet; then
-            echo "changed=false" >> "${GITHUB_OUTPUT}"
-            echo "source_sha=${before_sha}" >> "${GITHUB_OUTPUT}"
+            {
+              echo "changed=false"
+              echo "before_sha=${before_sha}"
+              echo "source_sha=${before_sha}"
+            } >> "${GITHUB_OUTPUT}"
             exit 0
           fi
 
@@ -145,8 +153,11 @@ jobs:
             -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             push origin "HEAD:${HOMEPAGES_QA_SOURCE_REF}"
-          echo "changed=true" >> "${GITHUB_OUTPUT}"
-          echo "source_sha=$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+          {
+            echo "changed=true"
+            echo "before_sha=${before_sha}"
+            echo "source_sha=$(git rev-parse HEAD)"
+          } >> "${GITHUB_OUTPUT}"
 
       - name: Deploy changed QA homepage
         if: ${{ steps.bake.outputs.changed == 'true' }}
@@ -154,23 +165,76 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SITE: ${{ steps.select.outputs.site }}
+          BEFORE_SHA: ${{ steps.bake.outputs.before_sha }}
           SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}
         run: |
           set -euo pipefail
           auth_header="$(printf 'x-access-token:%s' "${HOMEPAGES_SOURCE_PAT}" | base64 -w0)"
+          repo="${GITHUB_WORKSPACE}/homepages"
+          key="${SITE//./_}"
+          metric_path="data/metrics/${SITE}.json"
+          feed_path="data/homepage_resource_feeds/${key}.json"
+          paths=("${metric_path}")
+          if git -C "${repo}" cat-file -e "${SOURCE_SHA}:${feed_path}" 2>/dev/null; then
+            paths+=("${feed_path}")
+          fi
           identity_url="https://qa.${SITE}/.well-known/homepages-deployment.json"
           current_sha="$(curl -fsS --compressed --max-time 20 "${identity_url}?before=${GITHUB_RUN_ID}" | jq -r '.source_sha // ""')"
           candidate="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             ls-remote --heads https://github.com/conholdate/homepages.git 'refs/heads/homepages-agent/qa-changes/*' | \
             awk -v expected="${current_sha}" '$1 == expected { print $2; exit }')"
+          deploy_sha="${SOURCE_SHA}"
           if [ -n "${candidate}" ]; then
-            echo "Preserving active QA candidate ${candidate} at ${current_sha}."
-            exit 0
+            candidate_branch="${candidate#refs/heads/}"
+            echo "Refreshing generated data on active QA candidate ${candidate} at ${current_sha}."
+            git -C "${repo}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+              fetch origin "+${candidate}:refs/remotes/origin/${candidate_branch}"
+            fetched_candidate_sha="$(git -C "${repo}" rev-parse "origin/${candidate_branch}")"
+            if [ "${fetched_candidate_sha}" != "${current_sha}" ]; then
+              echo "::error::Active QA candidate moved before data refresh: expected ${current_sha}, found ${fetched_candidate_sha}"
+              exit 1
+            fi
+            git -C "${repo}" checkout -B active-qa-data-refresh "origin/${candidate_branch}"
+            git -C "${repo}" checkout "${SOURCE_SHA}" -- "${paths[@]}"
+            git -C "${repo}" add -- "${paths[@]}"
+            unexpected="$(git -C "${repo}" diff --cached --name-only | while read -r changed_path; do
+              case "${changed_path}" in
+                "${metric_path}"|"${feed_path}") ;;
+                *) echo "${changed_path}" ;;
+              esac
+            done)"
+            if [ -n "${unexpected}" ]; then
+              echo "::error::Active candidate refresh changed an unapproved path: ${unexpected}"
+              exit 1
+            fi
+            if ! git -C "${repo}" diff --cached --quiet; then
+              git -C "${repo}" \
+                -c user.name="Homepages Agent" \
+                -c user.email="homepages.agent@conholdate.com" \
+                commit \
+                -m "Refresh ${SITE} baked homepage data" \
+                -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
+                -m "Co-authored-by: Codex <codex@openai.com>" \
+                -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+              deploy_sha="$(git -C "${repo}" rev-parse HEAD)"
+              git -C "${repo}" -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+                push --force-with-lease="${candidate}:${current_sha}" origin "HEAD:${candidate}"
+            else
+              deploy_sha="${current_sha}"
+            fi
+            public_sha="$(curl -fsS --compressed --max-time 20 "${identity_url}?candidate-ready=${GITHUB_RUN_ID}" | jq -r '.source_sha // ""')"
+            if [ "${public_sha}" != "${current_sha}" ]; then
+              echo "::error::Public QA changed before refreshed candidate deployment: expected ${current_sha}, found ${public_sha}"
+              exit 1
+            fi
+          elif [ "${current_sha}" != "${BEFORE_SHA}" ] && [ "${current_sha}" != "${SOURCE_SHA}" ]; then
+            echo "::error::QA ${SITE} serves unrecognized source ${current_sha}; expected prior data branch ${BEFORE_SHA} or refreshed source ${SOURCE_SHA}"
+            exit 1
           fi
 
           transaction_id="groupdocs-data-${GITHUB_RUN_ID}-${SITE//./-}"
           gh workflow run deploy-homepage.yml --repo "${GITHUB_REPOSITORY}" --ref main \
-            -f "site=${SITE}" -f "environment=qa" -f "ref=${SOURCE_SHA}" \
+            -f "site=${SITE}" -f "environment=qa" -f "ref=${deploy_sha}" \
             -f "deploy=true" -f "invalidate_cache=true" -f "transaction_id=${transaction_id}"
           run_id=""
           for _ in $(seq 1 30); do
@@ -185,10 +249,10 @@ jobs:
           for attempt in $(seq 1 20); do
             identity="$(curl -fsS --compressed --max-time 20 "${identity_url}?verify=${GITHUB_RUN_ID}-${attempt}" || true)"
             html="$(curl -fsS --compressed --max-time 20 "https://qa.${SITE}/?verify=${GITHUB_RUN_ID}-${attempt}" || true)"
-            if [ "$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null)" = "${SOURCE_SHA}" ] && \
+            if [ "$(jq -r '.source_sha // ""' <<<"${identity}" 2>/dev/null)" = "${deploy_sha}" ] && \
                [ "$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null)" = "${SITE}" ] && \
                grep -Eiq '<meta[^>]*name="?robots"?[^>]*content="?[^>]*noindex' <<<"${html}"; then
-              echo "Verified QA ${SITE} at ${SOURCE_SHA}."
+              echo "Verified QA ${SITE} at ${deploy_sha}."
               exit 0
             fi
             sleep 6
