@@ -29,17 +29,16 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
 
     def test_active_request_candidate_receives_only_refreshed_generated_data(self) -> None:
         self.assertIn("'refs/heads/homepages-agent/qa-changes/*'", self.workflow)
-        self.assertIn("Refreshing generated data on active QA candidate", self.workflow)
-        self.assertIn('checkout "${SOURCE_SHA}" -- "${paths[@]}"', self.workflow)
-        self.assertIn('push --force-with-lease="${candidate}:${current_sha}"', self.workflow)
-        self.assertIn('-f "ref=${deploy_sha}"', self.workflow)
+        self.assertIn("Baking generated data directly on active QA candidate", self.workflow)
+        self.assertIn('git checkout -B active-qa-data-refresh "origin/${target_branch}"', self.workflow)
+        self.assertIn('push --force-with-lease="${target_ref}:${before_sha}"', self.workflow)
+        self.assertIn('-f "ref=${SOURCE_SHA}"', self.workflow)
         self.assertNotIn("Preserving active QA candidate", self.workflow)
 
     def test_active_candidate_refresh_rejects_parent_and_path_drift(self) -> None:
-        self.assertIn("Active QA candidate moved before data refresh", self.workflow)
-        self.assertIn("Active candidate refresh changed an unapproved path", self.workflow)
-        self.assertIn("Public QA changed before refreshed candidate deployment", self.workflow)
-        self.assertIn("serves unrecognized source", self.workflow)
+        self.assertIn("Selected QA data target does not match public QA", self.workflow)
+        self.assertIn("Refresh changed an unapproved path", self.workflow)
+        self.assertIn("Public QA changed before refreshed deployment", self.workflow)
 
     def test_candidate_lookup_consumes_all_remote_output_under_pipefail(self) -> None:
         self.assertIn("$1 == expected && !found { print $2; found=1 }", self.workflow)
