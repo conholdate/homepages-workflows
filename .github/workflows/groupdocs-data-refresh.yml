@@ -182,7 +182,7 @@ jobs:
           current_sha="$(curl -fsS --compressed --max-time 20 "${identity_url}?before=${GITHUB_RUN_ID}" | jq -r '.source_sha // ""')"
           candidate="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             ls-remote --heads https://github.com/conholdate/homepages.git 'refs/heads/homepages-agent/qa-changes/*' | \
-            awk -v expected="${current_sha}" '$1 == expected { print $2; exit }')"
+            awk -v expected="${current_sha}" '$1 == expected && !found { print $2; found=1 }')"
           deploy_sha="${SOURCE_SHA}"
           if [ -n "${candidate}" ]; then
             candidate_branch="${candidate#refs/heads/}"

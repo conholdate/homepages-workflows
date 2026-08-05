@@ -41,6 +41,10 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("Public QA changed before refreshed candidate deployment", self.workflow)
         self.assertIn("serves unrecognized source", self.workflow)
 
+    def test_candidate_lookup_consumes_all_remote_output_under_pipefail(self) -> None:
+        self.assertIn("$1 == expected && !found { print $2; found=1 }", self.workflow)
+        self.assertNotIn("print $2; exit", self.workflow)
+
 
 if __name__ == "__main__":
     unittest.main()
