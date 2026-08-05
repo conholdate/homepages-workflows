@@ -21,14 +21,25 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertIn('resource-feed-bake --feed "${key}"', self.workflow)
 
     def test_commit_and_deploy_are_qa_only_and_path_scoped(self) -> None:
-        self.assertIn("^data/metrics/groupdocs", self.workflow)
-        self.assertIn("^data/homepage_resource_feeds/groupdocs_", self.workflow)
+        self.assertIn('metric_path="data/metrics/${SITE}.json"', self.workflow)
+        self.assertIn('feed_path="data/homepage_resource_feeds/${key}.json"', self.workflow)
+        self.assertIn('"${metric_path}"|"${feed_path}")', self.workflow)
         self.assertIn('-f "environment=qa"', self.workflow)
         self.assertNotIn("environment=production", self.workflow)
 
-    def test_active_request_candidate_is_preserved(self) -> None:
+    def test_active_request_candidate_receives_only_refreshed_generated_data(self) -> None:
         self.assertIn("'refs/heads/homepages-agent/qa-changes/*'", self.workflow)
-        self.assertIn("Preserving active QA candidate", self.workflow)
+        self.assertIn("Refreshing generated data on active QA candidate", self.workflow)
+        self.assertIn('checkout "${SOURCE_SHA}" -- "${paths[@]}"', self.workflow)
+        self.assertIn('push --force-with-lease="${candidate}:${current_sha}"', self.workflow)
+        self.assertIn('-f "ref=${deploy_sha}"', self.workflow)
+        self.assertNotIn("Preserving active QA candidate", self.workflow)
+
+    def test_active_candidate_refresh_rejects_parent_and_path_drift(self) -> None:
+        self.assertIn("Active QA candidate moved before data refresh", self.workflow)
+        self.assertIn("Active candidate refresh changed an unapproved path", self.workflow)
+        self.assertIn("Public QA changed before refreshed candidate deployment", self.workflow)
+        self.assertIn("serves unrecognized source", self.workflow)
 
 
 if __name__ == "__main__":
