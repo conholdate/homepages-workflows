@@ -24,7 +24,7 @@ def upload_command(*, config: Path, target_name: str, identity: Path) -> list[st
 
     raw_url = str(matches[0].get("URL") or matches[0].get("url") or "").strip()
     parsed = urlsplit(raw_url)
-    if parsed.scheme != "s3" or not parsed.netloc or parsed.username or parsed.password:
+    if parsed.scheme != "s3" or not parsed.netloc or "@" in parsed.netloc:
         raise ValueError("Deployment identity publishing requires a credential-free s3 target URL.")
     query = parse_qs(parsed.query, keep_blank_values=True)
     unknown = sorted(set(query) - {"endpoint", "region"})
