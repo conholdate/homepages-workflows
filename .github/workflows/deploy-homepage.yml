@@ -386,6 +386,10 @@ jobs:
           IFS=',' read -ra target_array <<< "$TARGETS"
           for target in "${target_array[@]}"; do
             hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes -1 --force
+            python ../workflow-support/.github/scripts/publish_deployment_identity.py \
+              --config "${{ steps.map.outputs.config }}" \
+              --target "$target" \
+              --identity public/.well-known/homepages-deployment.json
           done
 
           if [ "$INVALIDATE_CACHE" = "true" ] && [ "$CACHE_KIND" = "cloudfront-deploy-account" ]; then
