@@ -262,7 +262,7 @@ jobs:
 
             current_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-candidate-${site//./-}")"
             candidate_ref="$(printf '%s\n' "${candidate_heads}" | python \
-              "${GITHUB_WORKSPACE}/homepages-workflows/.github/scripts/resolve_active_qa_ref.py" \
+              "${GITHUB_WORKSPACE}/.github/scripts/resolve_active_qa_ref.py" \
               --sha "${current_qa_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}" --optional)"
             if [ -n "${candidate_ref}" ]; then
               preserved_candidates["${site}"]="${current_qa_sha}"
