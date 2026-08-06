@@ -35,21 +35,22 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertNotIn("environment=production", self.workflow)
 
     def test_active_request_candidate_receives_only_refreshed_generated_data(self) -> None:
-        self.assertIn("'refs/heads/homepages-agent/qa-changes/*'", self.workflow)
-        self.assertIn("Baking generated data directly on active QA candidate", self.workflow)
+        self.assertIn("resolve_active_qa_ref.py", self.workflow)
+        self.assertIn("Baking generated data directly on exact active QA source", self.workflow)
         self.assertIn('git checkout -B active-qa-data-refresh "origin/${target_branch}"', self.workflow)
         self.assertIn('push --force-with-lease="${target_ref}:${before_sha}"', self.workflow)
         self.assertIn('-f "ref=${SOURCE_SHA}"', self.workflow)
         self.assertNotIn("Preserving active QA candidate", self.workflow)
 
     def test_active_candidate_refresh_rejects_parent_and_path_drift(self) -> None:
+        self.assertIn("Public QA identity names unexpected repository", self.workflow)
         self.assertIn("Selected QA data target does not match public QA", self.workflow)
         self.assertIn("Refresh changed an unapproved path", self.workflow)
         self.assertIn("Public QA changed before refreshed deployment", self.workflow)
 
-    def test_candidate_lookup_consumes_all_remote_output_under_pipefail(self) -> None:
-        self.assertIn("$1 == expected && !found { print $2; found=1 }", self.workflow)
-        self.assertNotIn("print $2; exit", self.workflow)
+    def test_candidate_lookup_reads_all_remote_heads(self) -> None:
+        self.assertIn("ls-remote --heads https://github.com/conholdate/homepages.git", self.workflow)
+        self.assertNotIn("'refs/heads/homepages-agent/qa-changes/*'", self.workflow)
 
 
 if __name__ == "__main__":

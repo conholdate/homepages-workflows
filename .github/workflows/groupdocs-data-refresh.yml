@@ -120,21 +120,22 @@ jobs:
           identity_url="https://qa.${SITE}/.well-known/homepages-deployment.json"
 
           cd "${repo}"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            fetch origin "+refs/heads/${HOMEPAGES_QA_SOURCE_REF}:refs/remotes/origin/${HOMEPAGES_QA_SOURCE_REF}"
-          current_sha="$(curl -fsS --compressed --max-time 20 "${identity_url}?select=${GITHUB_RUN_ID}" | jq -r '.source_sha // ""')"
-          candidate="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            ls-remote --heads https://github.com/conholdate/homepages.git 'refs/heads/homepages-agent/qa-changes/*' | \
-            awk -v expected="${current_sha}" '$1 == expected && !found { print $2; found=1 }')"
-          target_ref="refs/heads/${HOMEPAGES_QA_SOURCE_REF}"
-          target_branch="${HOMEPAGES_QA_SOURCE_REF}"
-          if [ -n "${candidate}" ]; then
-            target_ref="${candidate}"
-            target_branch="${candidate#refs/heads/}"
-            git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-              fetch origin "+${target_ref}:refs/remotes/origin/${target_branch}"
-            echo "Baking generated data directly on active QA candidate ${target_ref} at ${current_sha}."
+          identity="$(curl -fsS --compressed --max-time 20 "${identity_url}?select=${GITHUB_RUN_ID}")"
+          identity_repo="$(jq -r '.repository // ""' <<<"${identity}")"
+          current_sha="$(jq -r '.source_sha // ""' <<<"${identity}")"
+          if [ "${identity_repo}" != "conholdate/homepages" ]; then
+            echo "::error::Public QA identity names unexpected repository: ${identity_repo}"
+            exit 1
           fi
+          remote_heads="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            ls-remote --heads https://github.com/conholdate/homepages.git)"
+          target_ref="$(printf '%s\n' "${remote_heads}" | python \
+            "${GITHUB_WORKSPACE}/homepages-workflows/.github/scripts/resolve_active_qa_ref.py" \
+            --sha "${current_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}")"
+          target_branch="${target_ref#refs/heads/}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            fetch origin "+${target_ref}:refs/remotes/origin/${target_branch}"
+          echo "Baking generated data directly on exact active QA source ${target_ref} at ${current_sha}."
           git checkout -B active-qa-data-refresh "origin/${target_branch}"
           before_sha="$(git rev-parse HEAD)"
           if [ "${before_sha}" != "${current_sha}" ]; then

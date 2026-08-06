@@ -38,7 +38,7 @@ transaction_id: <empty>
 | `homepages-pr-autopilot.yml` | Manual | Review, and optionally merge, a Homepages PR through the shared guard. |
 | `guarded-pr-autopilot.yml` | Reusable call | Shared implementation used by both PR wrappers. |
 | `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose product/metric data and synchronize approved deployments. |
-| `groupdocs-data-refresh.yml` | Schedule/manual | Bake one GroupDocs site's metrics and blog data, then refresh only its QA homepage. |
+| `groupdocs-data-refresh.yml` | Schedule/manual | Bake one GroupDocs site's metrics and blog data, then refresh its exact active QA source. |
 | `homepages-agent-heartbeat.yml` | Every hour at `:07` and `:37` UTC/manual | Produce Aspose coordination, validation, readiness, and metric evidence. |
 | `homepages-agent-menu-health.yml` | Daily at `03:17` UTC/manual | Refresh and commit Agent menu-health reports. |
 | `workflow-lint.yml` | Workflow/script PR or main push/manual | Run `actionlint`, `shellcheck`, and the deployment concurrency contract test. |
