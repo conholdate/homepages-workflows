@@ -77,15 +77,16 @@ The workflow:
 2. checks out the requested `conholdate/homepages` ref;
 3. resolves the checkout to an exact source SHA;
 4. selects the site/environment config, target, credentials, and cache mapping;
-5. installs Hugo Extended `0.162.0` and builds the site;
+5. resolves the exact QA or production Hugo pin from the checked-out site
+   manifest, installs that Hugo Extended version, and builds the site;
 6. writes and uploads deployment identity evidence;
 7. deploys only when `deploy=true` and explicitly publishes the hidden
    `.well-known` identity file to every selected S3 target;
 8. invalidates mapped cache only when requested.
 
-The central deploy workflow currently builds every listed site with Hugo
-Extended `0.162.0`. Repository-owned legacy workflows may use different pins;
-consult the actual workflow selected for the operation.
+The checked-out `docs/homepage-sites-manifest.yaml` is the Hugo runtime source
+of truth. The workflow fails before build or deployment when the selected site
+has no unique semantic-version pin for the requested environment.
 
 Deploys are serialized by destination:
 

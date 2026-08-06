@@ -98,7 +98,6 @@ jobs:
 
           site="${{ inputs.site }}"
           environment="${{ inputs.environment }}"
-          hugo_version="0.162.0"
 
           case "${site}:${environment}" in
             aspose.com:qa)
@@ -212,7 +211,6 @@ jobs:
               credential_set="sl"
               cache_kind="cloudfront-deploy-account"
               cache_alias="www.groupdocs.cloud"
-              hugo_version="0.101.0"
               ;;
             groupdocs.app:qa)
               config="config/config-stage-groupdocs-app.toml"
@@ -227,7 +225,6 @@ jobs:
               credential_set="sl"
               cache_kind="cloudfront-deploy-account"
               cache_alias="www.groupdocs.app"
-              hugo_version="0.161.1"
               ;;
             conholdate.com:qa)
               config="config/config-stage-conholdate-com.toml"
@@ -277,6 +274,10 @@ jobs:
             echo "::error::Config not found in conholdate/homepages: $config"
             exit 1
           fi
+          hugo_version="$(python ../workflow-support/.github/scripts/resolve_manifest_hugo.py \
+            --manifest docs/homepage-sites-manifest.yaml \
+            --site "$site" \
+            --environment "$environment")"
 
           {
             echo "config=$config"
