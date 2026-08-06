@@ -77,7 +77,8 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn('remote_qa_after="$(remote_qa_sha)"', self.workflow)
 
     def test_active_request_to_qa_candidates_are_not_replaced_by_metrics_refresh(self) -> None:
-        self.assertIn("'refs/heads/homepages-agent/qa-changes/*'", self.workflow)
+        self.assertIn("resolve_active_qa_ref.py", self.workflow)
+        self.assertIn("--optional", self.workflow)
         self.assertIn('declare -A preserved_candidates', self.workflow)
         self.assertIn('preserved_candidates["${site}"]="${current_qa_sha}"', self.workflow)
         self.assertIn('public_qa_matches_sha "${site}" "${preserved_sha}"', self.workflow)
