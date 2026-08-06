@@ -13,6 +13,11 @@ SPEC = importlib.util.spec_from_file_location("write_deployment_identity", SCRIP
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(MODULE)
+HUGO_SCRIPT = ROOT / ".github" / "scripts" / "resolve_manifest_hugo.py"
+HUGO_SPEC = importlib.util.spec_from_file_location("resolve_manifest_hugo", HUGO_SCRIPT)
+assert HUGO_SPEC and HUGO_SPEC.loader
+HUGO_MODULE = importlib.util.module_from_spec(HUGO_SPEC)
+HUGO_SPEC.loader.exec_module(HUGO_MODULE)
 
 
 class DeploymentIdentityTests(unittest.TestCase):
@@ -128,7 +133,7 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('cache_kind="cloudfront-deploy-account"', production)
         self.assertIn('cache_alias="www.groupdocs.com"', production)
 
-    def test_groupdocs_cloud_preserves_legacy_production_hugo_and_invalidates_cloudfront(self) -> None:
+    def test_groupdocs_cloud_preserves_production_mapping_and_invalidates_cloudfront(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
@@ -140,9 +145,8 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('cache_alias="qa.groupdocs.cloud"', qa)
         self.assertIn('cache_kind="cloudfront-deploy-account"', production)
         self.assertIn('cache_alias="www.groupdocs.cloud"', production)
-        self.assertIn('hugo_version="0.101.0"', production)
 
-    def test_groupdocs_app_preserves_legacy_production_hugo_and_invalidates_cloudfront(self) -> None:
+    def test_groupdocs_app_preserves_production_mapping_and_invalidates_cloudfront(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
@@ -154,18 +158,59 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('cache_alias="qa.groupdocs.app"', qa)
         self.assertIn('cache_kind="cloudfront-deploy-account"', production)
         self.assertIn('cache_alias="www.groupdocs.app"', production)
-        self.assertIn('hugo_version="0.161.1"', production)
 
     def test_deploy_workflow_uses_resolved_site_hugo_version(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn('hugo_version="0.162.0"', workflow)
+        self.assertIn("resolve_manifest_hugo.py", workflow)
+        self.assertIn("--manifest docs/homepage-sites-manifest.yaml", workflow)
+        self.assertNotIn('hugo_version="0.162.0"', workflow)
         self.assertIn('echo "hugo_version=$hugo_version"', workflow)
         self.assertIn('HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}', workflow)
         self.assertIn('hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz', workflow)
         self.assertIn('hugo_extended_${HUGO_VERSION}_Linux-64bit.tar.gz', workflow)
+
+    def test_manifest_hugo_resolver_uses_exact_site_environment_contract(self) -> None:
+        manifest = """sites:
+  groupdocs.com:
+    production_hugo: 0.161.1
+    stage_hugo: '0.101.0'
+  groupdocs.cloud:
+    production_hugo: 0.162.0
+    stage_hugo: 0.162.0
+"""
+        self.assertEqual(
+            "0.101.0",
+            HUGO_MODULE.resolve_manifest_hugo(
+                manifest,
+                site="groupdocs.com",
+                environment="qa",
+            ),
+        )
+        self.assertEqual(
+            "0.161.1",
+            HUGO_MODULE.resolve_manifest_hugo(
+                manifest,
+                site="groupdocs.com",
+                environment="production",
+            ),
+        )
+
+    def test_manifest_hugo_resolver_rejects_missing_or_invalid_contracts(self) -> None:
+        with self.assertRaisesRegex(ValueError, "not registered"):
+            HUGO_MODULE.resolve_manifest_hugo(
+                "sites:\n",
+                site="groupdocs.com",
+                environment="qa",
+            )
+        with self.assertRaisesRegex(ValueError, "no unique valid stage_hugo"):
+            HUGO_MODULE.resolve_manifest_hugo(
+                "sites:\n  groupdocs.com:\n    stage_hugo: latest\n",
+                site="groupdocs.com",
+                environment="qa",
+            )
 
 
 if __name__ == "__main__":
