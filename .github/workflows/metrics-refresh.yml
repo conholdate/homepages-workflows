@@ -2,7 +2,7 @@ name: Metrics Refresh
 
 on:
   schedule:
-    - cron: "20 1,13 * * *"
+    - cron: "20 */3 * * *"
   workflow_dispatch:
     inputs:
       agent_ref:
@@ -99,6 +99,8 @@ jobs:
             local branch="$1"
             local changed_var="$2"
             local sha_var="$3"
+            local sites_var="$4"
+            local failed_var="$5"
 
             cd "${homepages_repo}"
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
@@ -107,15 +109,37 @@ jobs:
             git clean -fd -- data/metrics data/products.json
 
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" products-catalog-sync --apply --write)
+            set +e
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-bake --site all --apply --skip-source-label-sync --write)
-            (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-validate --site all --write)
+            bake_exit=$?
+            set -e
+
+            metrics_report="${agent_repo}/reports/latest-metrics-bake.json"
+            successful_sites="$(python -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); print(" ".join(item["site"] for item in data if item.get("ok") and item.get("applied")))' "${metrics_report}")"
+            failed_sites="$(python -c 'import json,sys; data=json.load(open(sys.argv[1], encoding="utf-8")); print(" ".join(item["site"] for item in data if not item.get("ok")))' "${metrics_report}")"
+            if [ -z "${successful_sites}" ]; then
+              echo "::error::No site produced verified metrics; metrics-bake exit=${bake_exit}"
+              exit 1
+            fi
+            if [ -n "${failed_sites}" ]; then
+              echo "::warning::Metrics endpoints remained unavailable after bounded retries for: ${failed_sites}. Their last verified files are preserved."
+            fi
+            for site in ${successful_sites}; do
+              (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" metrics-validate --site "${site}" --write)
+            done
+            {
+              printf '%s=%s\n' "${sites_var}" "${successful_sites}"
+              printf '%s=%s\n' "${failed_var}" "${failed_sites}"
+            } >> "${GITHUB_OUTPUT}"
 
             git add data/products.json data/metrics/*.json
             "${workflows_repo}/.github/scripts/metrics-refresh-scope-guard.sh"
 
             if git diff --cached --quiet; then
-              printf '%s=false\n' "${changed_var}" >> "${GITHUB_OUTPUT}"
-              printf '%s=%s\n' "${sha_var}" "$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+              {
+                printf '%s=false\n' "${changed_var}"
+                printf '%s=%s\n' "${sha_var}" "$(git rev-parse HEAD)"
+              } >> "${GITHUB_OUTPUT}"
               echo "No metrics changes for ${branch}."
               return
             fi
@@ -126,14 +150,16 @@ jobs:
               -m "Co-authored-by: Codex <codex@openai.com>" \
               -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin "HEAD:${branch}"
-            printf '%s=true\n' "${changed_var}" >> "${GITHUB_OUTPUT}"
-            printf '%s=%s\n' "${sha_var}" "$(git rev-parse HEAD)" >> "${GITHUB_OUTPUT}"
+            {
+              printf '%s=true\n' "${changed_var}"
+              printf '%s=%s\n' "${sha_var}" "$(git rev-parse HEAD)"
+            } >> "${GITHUB_OUTPUT}"
           }
 
           cd "${agent_repo}"
-          refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed qa_sha
+          refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed qa_sha qa_sites qa_failed_sites
           if [ "${REFRESH_MAIN}" = "true" ]; then
-            refresh_branch main main_changed main_sha
+            refresh_branch main main_changed main_sha main_sites main_failed_sites
           else
             current_main_sha="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
               ls-remote https://github.com/conholdate/homepages.git refs/heads/main | awk '{print $1}')"
@@ -141,8 +167,12 @@ jobs:
               echo "::error::Could not resolve the current homepages main commit"
               exit 1
             fi
-            printf 'main_changed=false\n' >> "${GITHUB_OUTPUT}"
-            printf 'main_sha=%s\n' "${current_main_sha}" >> "${GITHUB_OUTPUT}"
+            {
+              printf 'main_changed=false\n'
+              printf 'main_sha=%s\n' "${current_main_sha}"
+              printf 'main_sites=\n'
+              printf 'main_failed_sites=\n'
+            } >> "${GITHUB_OUTPUT}"
             echo "Manual QA-only refresh left homepages main unchanged at ${current_main_sha}."
           fi
 
@@ -154,7 +184,12 @@ jobs:
           SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}
         run: |
           set -euo pipefail
-          sites=(aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org)
+          refreshed_sites="${{ steps.refresh.outputs.qa_sites }}"
+          read -r -a sites <<< "${refreshed_sites}"
+          if [ "${#sites[@]}" -eq 0 ]; then
+            echo "::error::No successfully refreshed QA sites were reported"
+            exit 1
+          fi
 
           if [ -z "${HOMEPAGES_SOURCE_PAT:-}" ]; then
             echo "::error::Missing HOMEPAGES_SOURCE_PAT"
@@ -324,7 +359,12 @@ jobs:
           SOURCE_SHA: ${{ steps.refresh.outputs.main_sha }}
         run: |
           set -euo pipefail
-          sites=(aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org)
+          refreshed_sites="${{ steps.refresh.outputs.main_sites }}"
+          read -r -a sites <<< "${refreshed_sites}"
+          if [ "${#sites[@]}" -eq 0 ]; then
+            echo "::error::No successfully refreshed production sites were reported"
+            exit 1
+          fi
 
           if [ -z "${HOMEPAGES_SOURCE_PAT:-}" ]; then
             echo "::error::Missing HOMEPAGES_SOURCE_PAT"
@@ -433,7 +473,11 @@ jobs:
             echo
             echo "- QA branch changed: ${{ steps.refresh.outputs.qa_changed || 'not reached' }}"
             echo "- QA source synchronized: ${{ steps.refresh.outputs.qa_sha || 'not reached' }}"
+            echo "- QA sites refreshed: ${{ steps.refresh.outputs.qa_sites || 'none' }}"
+            echo "- QA sites preserving last value: ${{ steps.refresh.outputs.qa_failed_sites || 'none' }}"
             echo "- Main branch changed: ${{ steps.refresh.outputs.main_changed || 'not reached' }}"
+            echo "- Production sites refreshed: ${{ steps.refresh.outputs.main_sites || 'none' }}"
+            echo "- Production sites preserving last value: ${{ steps.refresh.outputs.main_failed_sites || 'none' }}"
             echo "- Production deploy requested: ${{ steps.refresh.outputs.main_changed == 'true' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}"
             echo "- Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
           } >> "${GITHUB_STEP_SUMMARY}"
