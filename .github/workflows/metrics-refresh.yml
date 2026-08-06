@@ -2,7 +2,7 @@ name: Metrics Refresh
 
 on:
   schedule:
-    - cron: "20 */3 * * *"
+    - cron: "20 1,7,13,19 * * *"
   workflow_dispatch:
     inputs:
       agent_ref:
@@ -32,6 +32,7 @@ jobs:
 
     env:
       HOMEPAGES_AGENT_MANAGED_SCOPE: aspose
+      HOMEPAGES_METRICS_COVERED_SITES: aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org
       HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
       GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
       HOMEPAGES_SOURCE_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
@@ -72,6 +73,12 @@ jobs:
       - name: Install Homepages Agent
         working-directory: homepages-agent
         run: python -m pip install -e .
+
+      - name: Verify registered metrics schedule coverage
+        run: >-
+          python workflows/.github/scripts/metrics_registry_coverage.py
+          --registry homepages-agent/config/metrics-endpoints.yaml
+          --workflow-dir workflows/.github/workflows
 
       - name: Refresh and commit metrics
         id: refresh

@@ -10,10 +10,17 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.workflow = WORKFLOW.read_text(encoding="utf-8")
 
-    def test_schedules_follow_each_upstream_cycle_by_twenty_minutes(self) -> None:
-        self.assertIn('cron: "10 1,4,7,10,13,16,19,22 * * *"', self.workflow)
-        self.assertIn('cron: "20 0,3,6,9,12,15,18,21 * * *"', self.workflow)
-        self.assertIn('cron: "15 1,5,9,13,17,21 * * *"', self.workflow)
+    def test_schedules_follow_every_second_upstream_cycle_by_twenty_minutes(self) -> None:
+        self.assertIn('cron: "10 1,7,13,19 * * *"', self.workflow)
+        self.assertIn('cron: "20 0,6,12,18 * * *"', self.workflow)
+        self.assertIn('cron: "15 1,9,17 * * *"', self.workflow)
+
+    def test_registry_coverage_declares_all_groupdocs_metrics_sites(self) -> None:
+        self.assertIn(
+            "HOMEPAGES_METRICS_COVERED_SITES: groupdocs.com groupdocs.cloud groupdocs.app",
+            self.workflow,
+        )
+        self.assertIn("Verify registered metrics schedule coverage", self.workflow)
 
     def test_bakes_only_selected_site_without_a_duplicate_validation_fetch(self) -> None:
         self.assertIn('metrics-bake --site "${SITE}" --apply --skip-source-label-sync', self.workflow)
