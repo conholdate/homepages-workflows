@@ -35,7 +35,10 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertNotIn("environment=production", self.workflow)
 
     def test_active_request_candidate_receives_only_refreshed_generated_data(self) -> None:
-        self.assertIn("resolve_active_qa_ref.py", self.workflow)
+        self.assertIn(
+            '"${GITHUB_WORKSPACE}/.github/scripts/resolve_active_qa_ref.py"',
+            self.workflow,
+        )
         self.assertIn("Baking generated data directly on exact active QA source", self.workflow)
         self.assertIn('git checkout -B active-qa-data-refresh "origin/${target_branch}"', self.workflow)
         self.assertIn('push --force-with-lease="${target_ref}:${before_sha}"', self.workflow)

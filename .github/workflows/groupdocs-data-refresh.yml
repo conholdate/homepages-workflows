@@ -130,7 +130,7 @@ jobs:
           remote_heads="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             ls-remote --heads https://github.com/conholdate/homepages.git)"
           target_ref="$(printf '%s\n' "${remote_heads}" | python \
-            "${GITHUB_WORKSPACE}/homepages-workflows/.github/scripts/resolve_active_qa_ref.py" \
+            "${GITHUB_WORKSPACE}/.github/scripts/resolve_active_qa_ref.py" \
             --sha "${current_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}")"
           target_branch="${target_ref#refs/heads/}"
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
