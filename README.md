@@ -135,7 +135,7 @@ deployment target; it does not broaden the homepage file scope.
 `metrics-refresh.yml` is limited to the six Aspose sites. Its schedule is:
 
 ```text
-Every three hours at 20 minutes past the hour (UTC)
+01:20, 07:20, 13:20, and 19:20 UTC
 ```
 
 Scheduled execution is skipped unless:
@@ -143,6 +143,10 @@ Scheduled execution is skipped unless:
 ```text
 METRICS_REFRESH_CRON_ENABLED=true
 ```
+
+Before refreshing, the workflow compares every metrics-enabled Agent registry
+site with the coverage declared by the existing Aspose and GroupDocs scheduled
+workflows. Missing, unknown, or duplicate ownership blocks the run.
 
 The workflow refreshes `qa-homepages-v1` first. It synchronizes
 `data/products.json` from the fixed Aspose Available Now catalog, bakes metrics,
@@ -179,14 +183,14 @@ or Conholdate publishing authority.
 
 ## GroupDocs Data Refresh
 
-`groupdocs-data-refresh.yml` runs 20 minutes after each supplied upstream
-GroupDocs metrics schedule:
+`groupdocs-data-refresh.yml` runs 20 minutes after every second supplied
+upstream GroupDocs metrics cycle:
 
 | Site | Refresh times (UTC) | Baked data |
 | --- | --- | --- |
-| `groupdocs.com` | `01:10`, then every 3 hours | Total Downloads and latest blog posts |
-| `groupdocs.cloud` | `00:20`, then every 3 hours | Downloads and latest blog posts |
-| `groupdocs.app` | `01:15`, then every 4 hours | Data Processed |
+| `groupdocs.com` | `01:10`, `07:10`, `13:10`, `19:10` | Total Downloads and latest blog posts |
+| `groupdocs.cloud` | `00:20`, `06:20`, `12:20`, `18:20` | Downloads and latest blog posts |
+| `groupdocs.app` | `01:15`, `09:15`, `17:15` | Data Processed |
 
 Schedules run only when `GROUPDOCS_DATA_REFRESH_CRON_ENABLED=true`. Each run
 fetches one site's approved endpoint once, commits only that site's registered

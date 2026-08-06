@@ -23,7 +23,16 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertLess(bake, validate)
 
     def test_schedule_runs_after_the_common_upstream_metrics_cycle(self) -> None:
-        self.assertIn('cron: "20 */3 * * *"', self.workflow)
+        self.assertIn('cron: "20 1,7,13,19 * * *"', self.workflow)
+
+    def test_registry_coverage_is_checked_before_refresh(self) -> None:
+        coverage = self.workflow.index("Verify registered metrics schedule coverage")
+        refresh = self.workflow.index("Refresh and commit metrics")
+        self.assertLess(coverage, refresh)
+        self.assertIn(
+            "HOMEPAGES_METRICS_COVERED_SITES: aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org",
+            self.workflow,
+        )
 
     def test_failed_site_preserves_last_value_without_blocking_successful_sites(self) -> None:
         self.assertIn('if item.get("ok") and item.get("applied")', self.workflow)

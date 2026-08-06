@@ -2,9 +2,9 @@ name: GroupDocs Data Refresh
 
 on:
   schedule:
-    - cron: "10 1,4,7,10,13,16,19,22 * * *"
-    - cron: "20 0,3,6,9,12,15,18,21 * * *"
-    - cron: "15 1,5,9,13,17,21 * * *"
+    - cron: "10 1,7,13,19 * * *"
+    - cron: "20 0,6,12,18 * * *"
+    - cron: "15 1,9,17 * * *"
   workflow_dispatch:
     inputs:
       site:
@@ -39,6 +39,7 @@ jobs:
       HOMEPAGES_QA_SOURCE_REF: qa-homepages-v1
       HOMEPAGES_SOURCE_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
       GITHUB_HOMEPAGES_REPOS_PAT: ${{ secrets.HOMEPAGES_SOURCE_PAT }}
+      HOMEPAGES_METRICS_COVERED_SITES: groupdocs.com groupdocs.cloud groupdocs.app
 
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +72,12 @@ jobs:
         working-directory: homepages-agent
         run: python -m pip install -e .
 
+      - name: Verify registered metrics schedule coverage
+        run: >-
+          python workflows/.github/scripts/metrics_registry_coverage.py
+          --registry homepages-agent/config/metrics-endpoints.yaml
+          --workflow-dir workflows/.github/workflows
+
       - name: Select scheduled site
         id: select
         shell: bash
@@ -80,9 +87,9 @@ jobs:
         run: |
           set -euo pipefail
           case "${SCHEDULE}" in
-            "10 1,4,7,10,13,16,19,22 * * *") site="groupdocs.com" ;;
-            "20 0,3,6,9,12,15,18,21 * * *") site="groupdocs.cloud" ;;
-            "15 1,5,9,13,17,21 * * *") site="groupdocs.app" ;;
+            "10 1,7,13,19 * * *") site="groupdocs.com" ;;
+            "20 0,6,12,18 * * *") site="groupdocs.cloud" ;;
+            "15 1,9,17 * * *") site="groupdocs.app" ;;
             "") site="${MANUAL_SITE}" ;;
             *) echo "::error::Unknown schedule ${SCHEDULE}"; exit 1 ;;
           esac
