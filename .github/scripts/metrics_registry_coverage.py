@@ -7,7 +7,7 @@ from pathlib import Path
 import yaml
 
 
-COVERAGE_KEY = "HOMEPAGES_METRICS_COVERED_SITES"
+COVERAGE_FIELD = "HOMEPAGES_METRICS_COVERED_SITES"
 
 
 def _registered_sites(registry_path: Path) -> set[str]:
@@ -31,7 +31,7 @@ def _coverage_values(value: object) -> list[str]:
     found: list[str] = []
     if isinstance(value, dict):
         for key, child in value.items():
-            if key == COVERAGE_KEY and isinstance(child, str):
+            if key == COVERAGE_FIELD and isinstance(child, str):
                 found.extend(child.split())
             else:
                 found.extend(_coverage_values(child))
