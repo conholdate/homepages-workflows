@@ -18,12 +18,20 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         bake = self.workflow.index(
             "metrics-bake --site all --apply --skip-source-label-sync --write"
         )
-        validate = self.workflow.index("metrics-validate --site all --write")
+        validate = self.workflow.index('metrics-validate --site "${site}" --write')
         self.assertLess(catalog, bake)
         self.assertLess(bake, validate)
 
     def test_schedule_runs_after_the_common_upstream_metrics_cycle(self) -> None:
-        self.assertIn('cron: "20 1,13 * * *"', self.workflow)
+        self.assertIn('cron: "20 */3 * * *"', self.workflow)
+
+    def test_failed_site_preserves_last_value_without_blocking_successful_sites(self) -> None:
+        self.assertIn('if item.get("ok") and item.get("applied")', self.workflow)
+        self.assertIn('if not item.get("ok")', self.workflow)
+        self.assertIn("Their last verified files are preserved", self.workflow)
+        self.assertIn('metrics-validate --site "${site}" --write', self.workflow)
+        self.assertIn("SITES: ${{ steps.refresh.outputs.qa_sites }}", self.workflow)
+        self.assertIn("SITES: ${{ steps.refresh.outputs.main_sites }}", self.workflow)
 
     def test_commit_scope_is_limited_to_catalog_and_baked_metrics(self) -> None:
         self.assertIn("git add data/products.json data/metrics/*.json", self.workflow)

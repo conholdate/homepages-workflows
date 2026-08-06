@@ -135,7 +135,7 @@ deployment target; it does not broaden the homepage file scope.
 `metrics-refresh.yml` is limited to the six Aspose sites. Its schedule is:
 
 ```text
-01:20 UTC and 13:20 UTC every day
+Every three hours at 20 minutes past the hour (UTC)
 ```
 
 Scheduled execution is skipped unless:
@@ -146,13 +146,15 @@ METRICS_REFRESH_CRON_ENABLED=true
 
 The workflow refreshes `qa-homepages-v1` first. It synchronizes
 `data/products.json` from the fixed Aspose Available Now catalog, bakes metrics,
-validates all six Aspose sites, and permits commits only to:
+validates each successfully refreshed Aspose site, and permits commits only to:
 
 - `data/products.json`;
 - flat files under `data/metrics/*.json`.
 
-Catalog removals, ambiguous repository evidence, fetch errors, stale values,
-validation failures, or unrelated changed paths stop the run.
+Catalog removals, ambiguous repository evidence, validation failures, or
+unrelated changed paths stop the run. An endpoint that remains unavailable
+after bounded retries preserves that site's last verified file; other sites
+continue independently.
 
 After a successful refresh, public QA is reconciled to the exact QA commit.
 Sites already serving that SHA are skipped; stale sites are deployed and then
@@ -167,8 +169,8 @@ A manual run updates `main` and production only when
 METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true
 ```
 
-When a main metrics commit is created, the workflow dispatches all six Aspose
-production deployments at the exact commit, waits for every run, verifies every
+When a main metrics commit is created, the workflow deploys only successfully
+refreshed Aspose sites at the exact commit, waits for every run, verifies every
 public identity, and confirms `main` did not move during the rollout. No metrics
 change means no production deployment.
 
