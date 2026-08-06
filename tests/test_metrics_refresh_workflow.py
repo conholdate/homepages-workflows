@@ -30,8 +30,8 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn('if not item.get("ok")', self.workflow)
         self.assertIn("Their last verified files are preserved", self.workflow)
         self.assertIn('metrics-validate --site "${site}" --write', self.workflow)
-        self.assertIn("SITES: ${{ steps.refresh.outputs.qa_sites }}", self.workflow)
-        self.assertIn("SITES: ${{ steps.refresh.outputs.main_sites }}", self.workflow)
+        self.assertIn('refreshed_sites="${{ steps.refresh.outputs.qa_sites }}"', self.workflow)
+        self.assertIn('refreshed_sites="${{ steps.refresh.outputs.main_sites }}"', self.workflow)
 
     def test_commit_scope_is_limited_to_catalog_and_baked_metrics(self) -> None:
         self.assertIn("git add data/products.json data/metrics/*.json", self.workflow)
