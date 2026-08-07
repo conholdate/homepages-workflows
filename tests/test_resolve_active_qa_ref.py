@@ -55,16 +55,41 @@ class ResolveActiveQaRefTests(unittest.TestCase):
                 aggregate_ref="refs/heads/qa-homepages-v1",
             )
 
-    def test_optional_lookup_ignores_production_only_source(self) -> None:
+    def test_branchless_public_qa_uses_named_recovery_ref_not_aggregate(self) -> None:
         sha = "c" * 40
         self.assertEqual(
             MODULE.resolve_ref(
                 [f"{sha}\trefs/heads/main"],
                 sha=sha,
                 aggregate_ref="refs/heads/qa-homepages-v1",
-                optional=True,
+                recovery_ref="refs/heads/homepages-agent/qa-refresh/aspose.com",
             ),
-            "",
+            "refs/heads/homepages-agent/qa-refresh/aspose.com",
+        )
+
+    def test_recovery_ref_must_stay_in_managed_qa_namespace(self) -> None:
+        with self.assertRaisesRegex(ValueError, "outside the managed namespace"):
+            MODULE.resolve_ref(
+                [],
+                sha="d" * 40,
+                aggregate_ref="refs/heads/qa-homepages-v1",
+                recovery_ref="refs/heads/main",
+            )
+
+    def test_site_recovery_ref_wins_when_other_candidate_shares_sha(self) -> None:
+        sha = "e" * 40
+        recovery = "refs/heads/homepages-agent/qa-refresh/aspose.com"
+        self.assertEqual(
+            MODULE.resolve_ref(
+                [
+                    f"{sha}\trefs/heads/homepages-agent/qa-changes/other",
+                    f"{sha}\t{recovery}",
+                ],
+                sha=sha,
+                aggregate_ref="refs/heads/qa-homepages-v1",
+                recovery_ref=recovery,
+            ),
+            recovery,
         )
 
 

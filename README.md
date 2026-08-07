@@ -160,9 +160,15 @@ unrelated changed paths stop the run. An endpoint that remains unavailable
 after bounded retries preserves that site's last verified file; other sites
 continue independently.
 
-After a successful refresh, public QA is reconciled to the exact QA commit.
-Sites already serving that SHA are skipped; stale sites are deployed and then
-verified for exact identity and `noindex`.
+After a successful refresh, each public QA site is refreshed from its own exact
+currently deployed source. Sites already on the aggregate QA parent receive the
+new aggregate commit. An active candidate receives only its byte-identical,
+already-validated metrics file. If the public source no longer has a surviving
+candidate branch, the workflow creates a managed recovery ref at that exact
+source instead of falling back to stale aggregate content. Parent drift,
+unregistered paths, concurrent QA changes, or ambiguous refs stop before
+deployment. Every changed site is then verified for exact identity and
+`noindex`.
 
 ### Production Metrics Gate
 
