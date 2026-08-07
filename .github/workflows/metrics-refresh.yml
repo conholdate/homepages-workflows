@@ -195,6 +195,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}
           BEFORE_AGGREGATE_SHA: ${{ steps.refresh.outputs.qa_before_sha }}
+          GIT_AUTHOR_NAME: Homepages Agent
+          GIT_AUTHOR_EMAIL: homepages.agent@conholdate.com
+          GIT_COMMITTER_NAME: Homepages Agent
+          GIT_COMMITTER_EMAIL: homepages.agent@conholdate.com
         run: |
           set -euo pipefail
           refreshed_sites="${{ steps.refresh.outputs.qa_sites }}"

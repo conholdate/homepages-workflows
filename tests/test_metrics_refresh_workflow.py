@@ -103,6 +103,15 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("Public QA changed before metrics deployment", self.workflow)
         self.assertIn('push --force-with-lease="${lease}"', self.workflow)
 
+    def test_exact_parent_commit_has_repository_local_identity(self) -> None:
+        qa_step = self.workflow.index("name: Synchronize QA homepage deployments")
+        production_step = self.workflow.index("name: Dispatch production homepage deploys")
+        self.assertIn("GIT_AUTHOR_NAME: Homepages Agent", self.workflow[qa_step:production_step])
+        self.assertIn(
+            "GIT_COMMITTER_EMAIL: homepages.agent@conholdate.com",
+            self.workflow[qa_step:production_step],
+        )
+
     def test_manual_qa_only_refresh_does_not_mutate_main(self) -> None:
         self.assertIn(
             "REFRESH_MAIN: ${{ (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.deploy_production) }}",
