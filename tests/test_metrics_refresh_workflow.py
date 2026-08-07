@@ -76,18 +76,32 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("missing robots noindex", self.workflow)
         self.assertIn('remote_qa_after="$(remote_qa_sha)"', self.workflow)
 
-    def test_active_request_to_qa_candidates_are_not_replaced_by_metrics_refresh(self) -> None:
+    def test_active_qa_sources_receive_site_local_metrics_without_aggregate_fallback(self) -> None:
         self.assertIn(
             '"${GITHUB_WORKSPACE}/workflows/.github/scripts/resolve_active_qa_ref.py"',
             self.workflow,
         )
         self.assertIn("path: workflows", self.workflow)
-        self.assertIn("--optional", self.workflow)
-        self.assertIn('declare -A preserved_candidates', self.workflow)
-        self.assertIn('preserved_candidates["${site}"]="${current_qa_sha}"', self.workflow)
-        self.assertIn('public_qa_matches_sha "${site}" "${preserved_sha}"', self.workflow)
-        self.assertIn("Verified preserved active QA candidate", self.workflow)
-        self.assertIn("Preserved active QA candidate is missing robots noindex", self.workflow)
+        self.assertNotIn("--optional", self.workflow)
+        self.assertIn('--recovery-ref "${recovery_ref}"', self.workflow)
+        self.assertIn('BEFORE_AGGREGATE_SHA: ${{ steps.refresh.outputs.qa_before_sha }}', self.workflow)
+        self.assertIn('if [ "${current_qa_sha}" = "${BEFORE_AGGREGATE_SHA}" ]', self.workflow)
+        self.assertIn('git checkout "${SOURCE_SHA}" -- "data/metrics/${site}.json"', self.workflow)
+        self.assertEqual(
+            self.workflow.count("metrics-bake --site all --apply --skip-source-label-sync --write"),
+            1,
+        )
+        self.assertIn('target_shas["${site}"]="${candidate_sha}"', self.workflow)
+        self.assertIn('-f "ref=${target_sha}"', self.workflow)
+
+    def test_exact_parent_is_rechecked_before_each_qa_dispatch(self) -> None:
+        self.assertIn(
+            'latest_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-pre-dispatch-${site//./-}")"',
+            self.workflow,
+        )
+        self.assertIn('if [ "${latest_qa_sha}" != "${current_qa_sha}" ]', self.workflow)
+        self.assertIn("Public QA changed before metrics deployment", self.workflow)
+        self.assertIn('push --force-with-lease="${lease}"', self.workflow)
 
     def test_manual_qa_only_refresh_does_not_mutate_main(self) -> None:
         self.assertIn(

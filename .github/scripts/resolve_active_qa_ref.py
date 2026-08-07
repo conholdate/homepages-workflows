@@ -16,12 +16,14 @@ QA_REF_PREFIXES = (
 
 
 def resolve_ref(
-    lines: list[str], *, sha: str, aggregate_ref: str, optional: bool = False
+    lines: list[str], *, sha: str, aggregate_ref: str, recovery_ref: str = ""
 ) -> str:
     if not SHA_PATTERN.fullmatch(sha):
         raise ValueError(f"Public QA source is not an exact commit SHA: {sha}")
     if not aggregate_ref.startswith("refs/heads/"):
         raise ValueError(f"Aggregate QA ref is not a branch: {aggregate_ref}")
+    if recovery_ref and not recovery_ref.startswith(QA_REF_PREFIXES):
+        raise ValueError(f"Recovery QA ref is outside the managed namespace: {recovery_ref}")
 
     exact_refs: list[str] = []
     for line in lines:
@@ -31,6 +33,8 @@ def resolve_ref(
 
     if aggregate_ref in exact_refs:
         return aggregate_ref
+    if recovery_ref and recovery_ref in exact_refs:
+        return recovery_ref
 
     candidates = sorted(
         ref
@@ -39,8 +43,8 @@ def resolve_ref(
     )
     if len(candidates) == 1:
         return candidates[0]
-    if not candidates and optional:
-        return ""
+    if not candidates and recovery_ref:
+        return recovery_ref
     if not candidates:
         raise ValueError(
             f"No writable registered QA branch points to public source {sha}"
@@ -55,14 +59,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sha", required=True)
     parser.add_argument("--aggregate-ref", required=True)
-    parser.add_argument("--optional", action="store_true")
+    parser.add_argument("--recovery-ref", default="")
     args = parser.parse_args()
     try:
         resolved = resolve_ref(
             sys.stdin.read().splitlines(),
             sha=args.sha,
             aggregate_ref=args.aggregate_ref,
-            optional=args.optional,
+            recovery_ref=args.recovery_ref,
         )
     except ValueError as exc:
         print(f"::error::{exc}", file=sys.stderr)

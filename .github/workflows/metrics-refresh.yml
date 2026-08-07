@@ -108,12 +108,16 @@ jobs:
             local sha_var="$3"
             local sites_var="$4"
             local failed_var="$5"
+            local before_var="$6"
+            local before_sha
 
             cd "${homepages_repo}"
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" fetch origin "+refs/heads/${branch}:refs/remotes/origin/${branch}"
             git checkout -B "${branch}" "origin/${branch}"
             git reset --hard "origin/${branch}"
             git clean -fd -- data/metrics data/products.json
+            before_sha="$(git rev-parse HEAD)"
+            printf '%s=%s\n' "${before_var}" "${before_sha}" >> "${GITHUB_OUTPUT}"
 
             (cd "${agent_repo}" && python -m homepages_agent --homepages-repo "${homepages_repo}" products-catalog-sync --apply --write)
             set +e
@@ -164,9 +168,9 @@ jobs:
           }
 
           cd "${agent_repo}"
-          refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed qa_sha qa_sites qa_failed_sites
+          refresh_branch "${HOMEPAGES_QA_SOURCE_REF}" qa_changed qa_sha qa_sites qa_failed_sites qa_before_sha
           if [ "${REFRESH_MAIN}" = "true" ]; then
-            refresh_branch main main_changed main_sha main_sites main_failed_sites
+            refresh_branch main main_changed main_sha main_sites main_failed_sites main_before_sha
           else
             current_main_sha="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
               ls-remote https://github.com/conholdate/homepages.git refs/heads/main | awk '{print $1}')"
@@ -177,6 +181,7 @@ jobs:
             {
               printf 'main_changed=false\n'
               printf 'main_sha=%s\n' "${current_main_sha}"
+              printf 'main_before_sha=%s\n' "${current_main_sha}"
               printf 'main_sites=\n'
               printf 'main_failed_sites=\n'
             } >> "${GITHUB_OUTPUT}"
@@ -189,6 +194,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}
+          BEFORE_AGGREGATE_SHA: ${{ steps.refresh.outputs.qa_before_sha }}
         run: |
           set -euo pipefail
           refreshed_sites="${{ steps.refresh.outputs.qa_sites }}"
@@ -206,11 +212,6 @@ jobs:
           remote_qa_sha() {
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
               ls-remote https://github.com/conholdate/homepages.git "refs/heads/${HOMEPAGES_QA_SOURCE_REF}" | awk '{print $1}'
-          }
-          public_qa_matches() {
-            local site="$1"
-            local cache_key="$2"
-            public_qa_matches_sha "${site}" "${SOURCE_SHA}" "${cache_key}"
           }
           public_qa_matches_sha() {
             local site="$1"
@@ -253,21 +254,82 @@ jobs:
           candidate_heads="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             ls-remote --heads https://github.com/conholdate/homepages.git)"
           declare -A run_ids
-          declare -A preserved_candidates
+          declare -A target_shas
           for site in "${sites[@]}"; do
-            if public_qa_matches "${site}" "${GITHUB_RUN_ID}-before-${site//./-}"; then
+            if public_qa_matches_sha "${site}" "${SOURCE_SHA}" "${GITHUB_RUN_ID}-before-${site//./-}"; then
               echo "QA ${site} already serves ${SOURCE_SHA}; no deploy needed."
+              target_shas["${site}"]="${SOURCE_SHA}"
               continue
             fi
 
             current_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-candidate-${site//./-}")"
-            candidate_ref="$(printf '%s\n' "${candidate_heads}" | python \
-              "${GITHUB_WORKSPACE}/workflows/.github/scripts/resolve_active_qa_ref.py" \
-              --sha "${current_qa_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}" --optional)"
-            if [ -n "${candidate_ref}" ]; then
-              preserved_candidates["${site}"]="${current_qa_sha}"
-              echo "QA ${site} is reviewing active candidate ${candidate_ref} at ${current_qa_sha}; preserving it instead of replacing it with the metrics branch."
+            if [[ ! "${current_qa_sha}" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::error::Public QA source is not an exact commit SHA for ${site}: ${current_qa_sha}"
+              exit 1
+            fi
+            if [ "${current_qa_sha}" = "${BEFORE_AGGREGATE_SHA}" ]; then
+              target_shas["${site}"]="${SOURCE_SHA}"
+            else
+              recovery_ref="refs/heads/homepages-agent/qa-refresh/${site}"
+              candidate_ref="$(printf '%s\n' "${candidate_heads}" | python \
+                "${GITHUB_WORKSPACE}/workflows/.github/scripts/resolve_active_qa_ref.py" \
+                --sha "${current_qa_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}" \
+                --recovery-ref "${recovery_ref}")"
+              candidate_branch="${candidate_ref#refs/heads/}"
+              candidate_remote_sha="$(awk -v ref="${candidate_ref}" '$2 == ref {print $1}' <<<"${candidate_heads}")"
+
+              cd "${GITHUB_WORKSPACE}/homepages"
+              if [ "${candidate_remote_sha}" = "${current_qa_sha}" ]; then
+                git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+                  fetch origin "+${candidate_ref}:refs/remotes/origin/${candidate_branch}"
+                git checkout -B active-qa-metrics-refresh "refs/remotes/origin/${candidate_branch}"
+              else
+                git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+                  fetch origin "${current_qa_sha}"
+                git checkout -B active-qa-metrics-refresh "${current_qa_sha}"
+              fi
+              candidate_before_sha="$(git rev-parse HEAD)"
+              if [ "${candidate_before_sha}" != "${current_qa_sha}" ]; then
+                echo "::error::Selected QA metrics parent differs from public ${site}: selected ${candidate_before_sha}, public ${current_qa_sha}"
+                exit 1
+              fi
+              git clean -fd -- "data/metrics/${site}.json"
+              git checkout "${SOURCE_SHA}" -- "data/metrics/${site}.json"
+              unexpected="$(git diff --cached --name-only | grep -Ev "^data/metrics/${site//./\\.}\\.json$" || true)"
+              if [ -n "${unexpected}" ]; then
+                echo "::error::Exact-parent metrics refresh changed an unapproved path for ${site}: ${unexpected}"
+                exit 1
+              fi
+              if git diff --cached --quiet; then
+                candidate_sha="${current_qa_sha}"
+                echo "No generated metrics change for active QA ${site} at ${current_qa_sha}."
+              else
+                git commit \
+                  -m "Refresh ${site} baked metrics" \
+                  -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
+                  -m "Co-authored-by: Codex <codex@openai.com>" \
+                  -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+                candidate_sha="$(git rev-parse HEAD)"
+                lease="${candidate_ref}:"
+                if [ -n "${candidate_remote_sha}" ]; then
+                  lease="${candidate_ref}:${candidate_remote_sha}"
+                fi
+                git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+                  push --force-with-lease="${lease}" origin "HEAD:${candidate_ref}"
+                echo "Baked ${site} metrics on exact active QA parent ${current_qa_sha}; target ${candidate_sha}."
+              fi
+              target_shas["${site}"]="${candidate_sha}"
+            fi
+
+            target_sha="${target_shas[$site]}"
+            if [ "${target_sha}" = "${current_qa_sha}" ]; then
+              echo "QA ${site} metrics are unchanged at ${target_sha}; no deploy needed."
               continue
+            fi
+            latest_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-pre-dispatch-${site//./-}")"
+            if [ "${latest_qa_sha}" != "${current_qa_sha}" ]; then
+              echo "::error::Public QA changed before metrics deployment for ${site}: expected ${current_qa_sha}, found ${latest_qa_sha}"
+              exit 1
             fi
 
             transaction_id="metrics-refresh-${GITHUB_RUN_ID}-qa-${site//./-}"
@@ -276,7 +338,7 @@ jobs:
               --ref main \
               -f "site=${site}" \
               -f "environment=qa" \
-              -f "ref=${SOURCE_SHA}" \
+              -f "ref=${target_sha}" \
               -f "deploy=true" \
               -f "invalidate_cache=true" \
               -f "transaction_id=${transaction_id}"
@@ -293,24 +355,10 @@ jobs:
               exit 1
             fi
             run_ids["${site}"]="${run_id}"
-            echo "Dispatched ${site} QA deploy run ${run_id} at ${SOURCE_SHA}."
+            echo "Dispatched ${site} QA deploy run ${run_id} at ${target_sha}."
           done
 
           for site in "${sites[@]}"; do
-            preserved_sha="${preserved_candidates[$site]:-}"
-            if [ -n "${preserved_sha}" ]; then
-              if ! public_qa_matches_sha "${site}" "${preserved_sha}" "${GITHUB_RUN_ID}-preserved-${site//./-}"; then
-                echo "::error::Active QA candidate changed while metrics refresh was preserving ${site}: expected ${preserved_sha}"
-                exit 1
-              fi
-              if ! public_qa_has_noindex "${site}" "${GITHUB_RUN_ID}-preserved-noindex-${site//./-}"; then
-                echo "::error::Preserved active QA candidate is missing robots noindex for ${site} at ${preserved_sha}"
-                exit 1
-              fi
-              echo "Verified preserved active QA candidate for ${site} at ${preserved_sha}."
-              continue
-            fi
-
             run_id="${run_ids[$site]:-}"
             if [ -n "${run_id}" ]; then
               completed=false
@@ -335,22 +383,23 @@ jobs:
             fi
 
             verified=false
+            target_sha="${target_shas[$site]}"
             for attempt in $(seq 1 60); do
-              if public_qa_matches "${site}" "${GITHUB_RUN_ID}-after-${site//./-}-${attempt}"; then
+              if public_qa_matches_sha "${site}" "${target_sha}" "${GITHUB_RUN_ID}-after-${site//./-}-${attempt}"; then
                 verified=true
                 break
               fi
               sleep 10
             done
             if [ "${verified}" != "true" ]; then
-              echo "::error::Public QA deployment identity did not converge for ${site} at ${SOURCE_SHA}"
+              echo "::error::Public QA deployment identity did not converge for ${site} at ${target_sha}"
               exit 1
             fi
             if ! public_qa_has_noindex "${site}" "${GITHUB_RUN_ID}-noindex-${site//./-}"; then
-              echo "::error::Public QA root is missing robots noindex for ${site} at ${SOURCE_SHA}"
+              echo "::error::Public QA root is missing robots noindex for ${site} at ${target_sha}"
               exit 1
             fi
-            echo "Verified ${site} QA identity at ${SOURCE_SHA}${run_id:+ (run ${run_id})}."
+            echo "Verified ${site} QA identity at ${target_sha}${run_id:+ (run ${run_id})}."
           done
 
           remote_qa_after="$(remote_qa_sha)"
