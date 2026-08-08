@@ -33,7 +33,6 @@ jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 35
-    if: ${{ github.event_name != 'schedule' || vars.GROUPDOCS_DATA_REFRESH_CRON_ENABLED == 'true' }}
     env:
       HOMEPAGES_AGENT_TARGET_REPO: ${{ github.workspace }}/homepages
       HOMEPAGES_QA_SOURCE_REF: qa-homepages-v1

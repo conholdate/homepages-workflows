@@ -28,8 +28,6 @@ jobs:
     name: Refresh baked metrics
     runs-on: ubuntu-latest
     timeout-minutes: 75
-    if: ${{ github.event_name != 'schedule' || vars.METRICS_REFRESH_CRON_ENABLED == 'true' }}
-
     env:
       HOMEPAGES_AGENT_MANAGED_SCOPE: aspose
       HOMEPAGES_METRICS_COVERED_SITES: aspose.com aspose.cloud aspose.app aspose.ai aspose.net aspose.org

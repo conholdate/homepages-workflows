@@ -138,12 +138,6 @@ deployment target; it does not broaden the homepage file scope.
 01:20, 07:20, 13:20, and 19:20 UTC
 ```
 
-Scheduled execution is skipped unless:
-
-```text
-METRICS_REFRESH_CRON_ENABLED=true
-```
-
 Before refreshing, the workflow compares every metrics-enabled Agent registry
 site with the coverage declared by the existing Aspose and GroupDocs scheduled
 workflows. Missing, unknown, or duplicate ownership blocks the run.
@@ -198,10 +192,11 @@ upstream GroupDocs metrics cycle:
 | `groupdocs.cloud` | `00:20`, `06:20`, `12:20`, `18:20` | Downloads and latest blog posts |
 | `groupdocs.app` | `01:15`, `09:15`, `17:15` | Data Processed |
 
-Schedules run only when `GROUPDOCS_DATA_REFRESH_CRON_ENABLED=true`. Each run
-fetches one site's approved endpoint once, commits only that site's registered
-data files, and deploys only that QA homepage. When that homepage has an active
-Request-to-QA candidate, the workflow bakes that selected site's generated
+Each scheduled run fetches one site's approved endpoint once, commits only that
+site's registered data files, and deploys only that QA homepage. Pause a
+schedule explicitly through the GitHub Actions workflow state; there is no
+hidden repository-variable gate. When that homepage has an active Request-to-QA
+candidate, the workflow bakes that selected site's generated
 metrics/resource-feed files directly on the exact candidate branch and
 redeploys it; authored content and renderer files remain unchanged. It never
 deploys production.
