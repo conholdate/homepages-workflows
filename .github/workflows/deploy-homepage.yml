@@ -1,5 +1,5 @@
 name: Deploy Homepage
-run-name: "Deploy ${{ inputs.site }} → ${{ inputs.environment }} (${{ inputs.ref }})${{ inputs.transaction_id && format(' tx={0}', inputs.transaction_id) || '' }}${{ !inputs.deploy && ' [build-only]' || '' }}"
+run-name: "Deploy ${{ inputs.site }} → ${{ inputs.environment }} (${{ inputs.ref }})${{ inputs.transaction_id && format(' tx={0}', inputs.transaction_id) || '' }}${{ inputs.reconcile_identity && ' [identity-only]' || (!inputs.deploy && ' [build-only]' || '') }}"
 
 on:
   workflow_dispatch:
@@ -47,8 +47,24 @@ on:
         required: false
         type: string
         default: ""
+      reconcile_identity:
+        description: Republish a verified identity artifact without rebuilding or deploying homepage content
+        required: true
+        type: boolean
+        default: false
+      identity_run_id:
+        description: Original Deploy Homepage run containing the exact identity artifact
+        required: false
+        type: string
+        default: ""
+      identity_run_attempt:
+        description: Original Deploy Homepage run attempt containing the exact identity artifact
+        required: false
+        type: string
+        default: ""
 
 permissions:
+  actions: read
   contents: read
 
 concurrency:
@@ -89,6 +105,23 @@ jobs:
           git cat-file -e "${source_sha}^{commit}"
           echo "source_sha=${source_sha}" >> "$GITHUB_OUTPUT"
           echo "Resolved conholdate/homepages source: ${source_sha}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Validate identity reconciliation inputs
+        if: ${{ inputs.reconcile_identity }}
+        shell: bash
+        env:
+          IDENTITY_RUN_ID: ${{ inputs.identity_run_id }}
+          IDENTITY_RUN_ATTEMPT: ${{ inputs.identity_run_attempt }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.deploy }}" != "true" ]; then
+            echo "::error::Identity reconciliation requires deploy=true."
+            exit 1
+          fi
+          if ! [[ "$IDENTITY_RUN_ID" =~ ^[1-9][0-9]*$ ]] || ! [[ "$IDENTITY_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::Identity reconciliation requires positive original run and attempt IDs."
+            exit 1
+          fi
 
       - name: Resolve site deployment map
         id: map
@@ -291,6 +324,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Setup Hugo
+        if: ${{ !inputs.reconcile_identity }}
         env:
           HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}
         run: |
@@ -304,9 +338,11 @@ jobs:
           hugo version
 
       - name: Build
+        if: ${{ !inputs.reconcile_identity }}
         run: hugo --config "${{ steps.map.outputs.config }}" --minify
 
       - name: Write deployment identity
+        if: ${{ !inputs.reconcile_identity }}
         shell: bash
         run: |
           set -euo pipefail
@@ -320,12 +356,36 @@ jobs:
             --evidence-dir deployment-evidence
 
       - name: Upload deployment identity evidence
+        if: ${{ !inputs.reconcile_identity }}
         uses: actions/upload-artifact@v4
         with:
           name: homepages-deployment-identity-${{ inputs.site }}-${{ inputs.environment }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: homepages-source/deployment-evidence/homepages-deployment.json
           if-no-files-found: error
           retention-days: 90
+
+      - name: Download original deployment identity evidence
+        if: ${{ inputs.reconcile_identity }}
+        uses: actions/download-artifact@v4
+        with:
+          name: homepages-deployment-identity-${{ inputs.site }}-${{ inputs.environment }}-${{ inputs.identity_run_id }}-${{ inputs.identity_run_attempt }}
+          path: homepages-source/deployment-evidence/reconcile
+          github-token: ${{ github.token }}
+          repository: conholdate/homepages-workflows
+          run-id: ${{ inputs.identity_run_id }}
+
+      - name: Verify original deployment identity evidence
+        if: ${{ inputs.reconcile_identity }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python ../workflow-support/.github/scripts/verify_deployment_identity.py \
+            --identity deployment-evidence/reconcile/homepages-deployment.json \
+            --source-sha "${{ steps.source.outputs.source_sha }}" \
+            --site "${{ inputs.site }}" \
+            --environment "${{ inputs.environment }}" \
+            --run-id "${{ inputs.identity_run_id }}" \
+            --run-attempt "${{ inputs.identity_run_attempt }}"
 
       - name: Deploy
         if: ${{ inputs.deploy }}
@@ -386,11 +446,16 @@ jobs:
 
           IFS=',' read -ra target_array <<< "$TARGETS"
           for target in "${target_array[@]}"; do
-            hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes -1 --force
+            identity_path="public/.well-known/homepages-deployment.json"
+            if [ "${{ inputs.reconcile_identity }}" = "true" ]; then
+              identity_path="deployment-evidence/reconcile/homepages-deployment.json"
+            else
+              hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes -1 --force
+            fi
             python ../workflow-support/.github/scripts/publish_deployment_identity.py \
               --config "${{ steps.map.outputs.config }}" \
               --target "$target" \
-              --identity public/.well-known/homepages-deployment.json
+              --identity "$identity_path"
           done
 
           if [ "$INVALIDATE_CACHE" = "true" ] && [ "$CACHE_KIND" = "cloudfront-deploy-account" ]; then
