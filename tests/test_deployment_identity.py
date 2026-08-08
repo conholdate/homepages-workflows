@@ -24,6 +24,11 @@ PUBLISH_SPEC = importlib.util.spec_from_file_location("publish_deployment_identi
 assert PUBLISH_SPEC and PUBLISH_SPEC.loader
 PUBLISH_MODULE = importlib.util.module_from_spec(PUBLISH_SPEC)
 PUBLISH_SPEC.loader.exec_module(PUBLISH_MODULE)
+VERIFY_SCRIPT = ROOT / ".github" / "scripts" / "verify_deployment_identity.py"
+VERIFY_SPEC = importlib.util.spec_from_file_location("verify_deployment_identity", VERIFY_SCRIPT)
+assert VERIFY_SPEC and VERIFY_SPEC.loader
+VERIFY_MODULE = importlib.util.module_from_spec(VERIFY_SPEC)
+VERIFY_SPEC.loader.exec_module(VERIFY_MODULE)
 
 
 class DeploymentIdentityTests(unittest.TestCase):
@@ -144,6 +149,53 @@ class DeploymentIdentityTests(unittest.TestCase):
                     target_name="Production",
                     identity=Path("identity.json"),
                 )
+
+    def test_identity_reconciliation_verifies_exact_original_artifact(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            identity = Path(tmp) / "homepages-deployment.json"
+            payload = MODULE.deployment_identity(
+                source_sha="c" * 40,
+                site="groupdocs.com",
+                environment="production",
+                run_id=31256841587,
+                run_attempt=1,
+                generated_at_utc="2026-08-08T12:34:56+00:00",
+            )
+            identity.write_text(json.dumps(payload), encoding="utf-8")
+            VERIFY_MODULE.verify_identity(
+                identity=identity,
+                source_sha="c" * 40,
+                site="groupdocs.com",
+                environment="production",
+                run_id=31256841587,
+                run_attempt=1,
+            )
+
+            with self.assertRaisesRegex(ValueError, "does not match"):
+                VERIFY_MODULE.verify_identity(
+                    identity=identity,
+                    source_sha="d" * 40,
+                    site="groupdocs.com",
+                    environment="production",
+                    run_id=31256841587,
+                    run_attempt=1,
+                )
+
+    def test_identity_reconciliation_skips_build_and_content_deploy(self) -> None:
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("reconcile_identity:", workflow)
+        self.assertIn("actions: read", workflow)
+        self.assertIn("Download original deployment identity evidence", workflow)
+        self.assertIn("verify_deployment_identity.py", workflow)
+        self.assertIn("if: ${{ !inputs.reconcile_identity }}", workflow)
+        self.assertIn('if [ "${{ inputs.reconcile_identity }}" = "true" ]; then', workflow)
+        self.assertIn('identity_path="deployment-evidence/reconcile/homepages-deployment.json"', workflow)
+        reconciliation_branch = workflow.split(
+            'if [ "${{ inputs.reconcile_identity }}" = "true" ]; then', 1
+        )[1].split("fi", 1)[0]
+        self.assertNotIn("hugo --config", reconciliation_branch)
 
     def test_conholdate_cloud_qa_uses_its_own_cloudfront_distribution(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(

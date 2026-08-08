@@ -57,6 +57,9 @@ All schedules use UTC.
 | `deploy` | Publish after the build. | `false` |
 | `invalidate_cache` | Purge the mapped CloudFront or BunnyCDN cache after publish. | `false` |
 | `transaction_id` | Optional Agent correlation ID for publish or rollback. | Empty |
+| `reconcile_identity` | Recovery-only: republish an exact verified identity artifact without rebuilding or deploying homepage content. | `false` |
+| `identity_run_id` | Original governed deployment run containing the identity artifact. | Empty |
+| `identity_run_attempt` | Original governed deployment attempt containing the identity artifact. | Empty |
 
 Supported workflow choices are:
 
@@ -117,6 +120,14 @@ Hugo deployment excludes hidden paths, so the shared workflow uploads this
 single generated JSON file explicitly after each successful Hugo target deploy
 and before cache invalidation. The upload uses only the selected committed
 deployment target; it does not broaden the homepage file scope.
+
+If a competing external process removes only this identity file after a valid
+deployment, operators may use identity reconciliation with the original run
+and attempt. The workflow downloads that exact retained artifact, verifies it
+against the checked-out source/site/environment, republishes only the identity
+file, and invalidates the mapped cache. It does not run Hugo or upload homepage
+content. Reconciliation must never reconstruct identity metadata or substitute
+a newer workflow run.
 
 ## QA And Production Safety
 
