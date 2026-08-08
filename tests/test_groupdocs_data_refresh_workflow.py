@@ -14,6 +14,7 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertIn('cron: "10 1,7,13,19 * * *"', self.workflow)
         self.assertIn('cron: "20 0,6,12,18 * * *"', self.workflow)
         self.assertIn('cron: "15 1,9,17 * * *"', self.workflow)
+        self.assertNotIn("GROUPDOCS_DATA_REFRESH_CRON_ENABLED", self.workflow)
 
     def test_registry_coverage_declares_all_groupdocs_metrics_sites(self) -> None:
         self.assertIn(

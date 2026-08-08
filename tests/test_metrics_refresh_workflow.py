@@ -24,6 +24,7 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
 
     def test_schedule_runs_after_the_common_upstream_metrics_cycle(self) -> None:
         self.assertIn('cron: "20 1,7,13,19 * * *"', self.workflow)
+        self.assertNotIn("METRICS_REFRESH_CRON_ENABLED", self.workflow)
 
     def test_registry_coverage_is_checked_before_refresh(self) -> None:
         coverage = self.workflow.index("Verify registered metrics schedule coverage")
