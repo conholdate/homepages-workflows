@@ -212,6 +212,11 @@ metrics/resource-feed files directly on the exact candidate branch and
 redeploys it; authored content and renderer files remain unchanged. It never
 deploys production.
 
+All three GroupDocs homepages are managed through the governed production and
+rollback lifecycle. Scheduled GroupDocs data refresh remains deliberately
+QA-only until a separate production-refresh policy is explicitly approved;
+managed status alone does not grant that scheduler production authority.
+
 ## Agent CI And PR Review
 
 ### Homepages Agent CI
