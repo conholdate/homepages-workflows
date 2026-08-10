@@ -64,7 +64,7 @@ All schedules use UTC.
 Current registered deployment profiles are:
 
 - Aspose: `aspose.com`, `aspose.cloud`, `aspose.app`, `aspose.ai`,
-  `aspose.net`, and `aspose.org`;
+  `aspose.net`, `aspose.org`, and `aspose.xyz`;
 - GroupDocs: `groupdocs.com`, `groupdocs.cloud`, and `groupdocs.app`;
 - Conholdate: `conholdate.com` and `conholdate.cloud`.
 

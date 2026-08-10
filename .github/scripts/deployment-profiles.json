@@ -73,6 +73,18 @@
         "cache": {"kind": "bunny", "url": "https://www.aspose.org/*"}
       }
     },
+    "aspose.xyz": {
+      "qa": {
+        "credential_set": "ceph_qa",
+        "targets": ["staging_ceph"],
+        "cache": {"kind": "bunny", "url": "https://qa.aspose.xyz/*"}
+      },
+      "production": {
+        "credential_set": "ceph_production",
+        "targets": ["production_ceph"],
+        "cache": {"kind": "bunny", "url": "https://www.aspose.xyz/*"}
+      }
+    },
     "groupdocs.com": {
       "qa": {
         "credential_set": "sl",

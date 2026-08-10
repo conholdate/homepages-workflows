@@ -251,6 +251,7 @@ class DeploymentIdentityTests(unittest.TestCase):
                 "aspose.ai",
                 "aspose.net",
                 "aspose.org",
+                "aspose.xyz",
                 "groupdocs.com",
                 "groupdocs.cloud",
                 "groupdocs.app",
@@ -264,6 +265,10 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertEqual(
             {"kind": "bunny", "url": "https://www.aspose.org/*"},
             data["sites"]["aspose.org"]["production"]["cache"],
+        )
+        self.assertEqual(
+            {"kind": "bunny", "url": "https://qa.aspose.xyz/*"},
+            data["sites"]["aspose.xyz"]["qa"]["cache"],
         )
         self.assertEqual(
             {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.app"},
