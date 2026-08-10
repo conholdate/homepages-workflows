@@ -211,7 +211,7 @@ class DeploymentIdentityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("resolve_deployment_profile.py", workflow)
-        self.assertIn("--profiles ../workflow-support/.github/deployment-profiles.json", workflow)
+        self.assertIn("--profiles ../workflow-support/.github/scripts/deployment-profiles.json", workflow)
         self.assertIn("type: string", workflow)
         self.assertNotIn('case "${site}:${environment}"', workflow)
         self.assertNotIn("conholdate.app", workflow)
@@ -240,7 +240,7 @@ class DeploymentIdentityTests(unittest.TestCase):
 
     def test_deployment_profiles_preserve_current_cache_and_credential_contracts(self) -> None:
         data = json.loads(
-            (ROOT / ".github" / "deployment-profiles.json").read_text(encoding="utf-8")
+            (ROOT / ".github" / "scripts" / "deployment-profiles.json").read_text(encoding="utf-8")
         )
         self.assertEqual(1, data["schema_version"])
         self.assertEqual(

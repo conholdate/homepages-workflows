@@ -69,7 +69,7 @@ Current registered deployment profiles are:
 - Conholdate: `conholdate.com` and `conholdate.cloud`.
 
 The workflow accepts a site string, then validates it against both the checked-out
-Homepages manifest and `.github/deployment-profiles.json`. Adding a site requires
+Homepages manifest and `.github/scripts/deployment-profiles.json`. Adding a site requires
 a manifest entry and a deployment profile; unregistered strings fail before build
 or deployment. Lifecycle availability still comes from the Homepages manifest.
 
@@ -91,7 +91,7 @@ The workflow:
 8. invalidates mapped cache only when requested.
 
 The checked-out `docs/homepage-sites-manifest.yaml` is the site, config, and
-Hugo runtime source of truth. `.github/deployment-profiles.json` owns deploy
+Hugo runtime source of truth. `.github/scripts/deployment-profiles.json` owns deploy
 targets, credential selection, and cache behavior. The workflow fails before build or
 deployment when the selected site has no unique semantic-version pin for the
 requested environment.
