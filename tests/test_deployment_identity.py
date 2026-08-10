@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from pathlib import Path
+import sys
 import tempfile
 import unittest
 
@@ -18,6 +19,14 @@ HUGO_SPEC = importlib.util.spec_from_file_location("resolve_manifest_hugo", HUGO
 assert HUGO_SPEC and HUGO_SPEC.loader
 HUGO_MODULE = importlib.util.module_from_spec(HUGO_SPEC)
 HUGO_SPEC.loader.exec_module(HUGO_MODULE)
+PROFILE_SCRIPT = ROOT / ".github" / "scripts" / "resolve_deployment_profile.py"
+PROFILE_SPEC = importlib.util.spec_from_file_location(
+    "resolve_deployment_profile", PROFILE_SCRIPT
+)
+assert PROFILE_SPEC and PROFILE_SPEC.loader
+sys.path.insert(0, str(PROFILE_SCRIPT.parent))
+PROFILE_MODULE = importlib.util.module_from_spec(PROFILE_SPEC)
+PROFILE_SPEC.loader.exec_module(PROFILE_MODULE)
 
 PUBLISH_SCRIPT = ROOT / ".github" / "scripts" / "publish_deployment_identity.py"
 PUBLISH_SPEC = importlib.util.spec_from_file_location("publish_deployment_identity", PUBLISH_SCRIPT)
@@ -197,91 +206,197 @@ class DeploymentIdentityTests(unittest.TestCase):
         )[1].split("fi", 1)[0]
         self.assertNotIn("hugo --config", reconciliation_branch)
 
-    def test_conholdate_cloud_qa_uses_its_own_cloudfront_distribution(self) -> None:
+    def test_deploy_workflow_uses_registered_profiles_not_a_site_case_map(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
-        qa = workflow.split("conholdate.cloud:qa)", 1)[1].split(";;", 1)[0]
-        production = workflow.split("conholdate.cloud:production)", 1)[1].split(";;", 1)[0]
-
-        self.assertIn('cache_kind="cloudfront"', qa)
-        self.assertIn(
-            'cache_variable="CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"',
-            qa,
-        )
+        self.assertIn("resolve_deployment_profile.py", workflow)
+        self.assertIn("--profiles ../workflow-support/.github/deployment-profiles.json", workflow)
+        self.assertIn("type: string", workflow)
+        self.assertNotIn('case "${site}:${environment}"', workflow)
+        self.assertNotIn("conholdate.app", workflow)
         self.assertIn(
             "CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID: "
             "${{ vars.CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID }}",
             workflow,
         )
-        self.assertIn('cache_kind="none"', production)
-
-    def test_conholdate_com_qa_resolves_cloudfront_by_exact_alias(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
-            encoding="utf-8"
-        )
-        qa = workflow.split("conholdate.com:qa)", 1)[1].split(";;", 1)[0]
-        production = workflow.split("conholdate.com:production)", 1)[1].split(";;", 1)[0]
-
-        self.assertIn('cache_kind="cloudfront"', qa)
-        self.assertIn('cache_alias="qa.conholdate.com"', qa)
         self.assertIn("steps.map.outputs.cache_alias", workflow)
         self.assertIn("aws cloudfront list-distributions", workflow)
         self.assertIn('alias in item.get("Aliases", {}).get("Items", [])', workflow)
-        self.assertIn('cache_kind="none"', production)
-
-    def test_groupdocs_com_qa_and_production_invalidate_cloudfront_with_deploy_credentials(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
-            encoding="utf-8"
-        )
-        qa = workflow.split("groupdocs.com:qa)", 1)[1].split(";;", 1)[0]
-        production = workflow.split("groupdocs.com:production)", 1)[1].split(";;", 1)[0]
-
-        self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
-        self.assertIn('cache_alias="qa.groupdocs.com"', qa)
         self.assertIn('CACHE_KIND: ${{ steps.map.outputs.cache_kind }}', workflow)
         self.assertIn('[ "$CACHE_KIND" = "cloudfront-deploy-account" ]', workflow)
-        self.assertIn('cache_kind="cloudfront-deploy-account"', production)
-        self.assertIn('cache_alias="www.groupdocs.com"', production)
-
-    def test_groupdocs_cloud_preserves_production_mapping_and_invalidates_cloudfront(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
-            encoding="utf-8"
-        )
-        qa = workflow.split("groupdocs.cloud:qa)", 1)[1].split(";;", 1)[0]
-        production = workflow.split("groupdocs.cloud:production)", 1)[1].split(";;", 1)[0]
-
-        self.assertIn('credential_set="sl"', qa)
-        self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
-        self.assertIn('cache_alias="qa.groupdocs.cloud"', qa)
-        self.assertIn('cache_kind="cloudfront-deploy-account"', production)
-        self.assertIn('cache_alias="www.groupdocs.cloud"', production)
-
-    def test_groupdocs_app_preserves_production_mapping_and_invalidates_cloudfront(self) -> None:
-        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
-            encoding="utf-8"
-        )
-        qa = workflow.split("groupdocs.app:qa)", 1)[1].split(";;", 1)[0]
-        production = workflow.split("groupdocs.app:production)", 1)[1].split(";;", 1)[0]
-
-        self.assertIn('credential_set="sl"', qa)
-        self.assertIn('cache_kind="cloudfront-deploy-account"', qa)
-        self.assertIn('cache_alias="qa.groupdocs.app"', qa)
-        self.assertIn('cache_kind="cloudfront-deploy-account"', production)
-        self.assertIn('cache_alias="www.groupdocs.app"', production)
 
     def test_deploy_workflow_uses_resolved_site_hugo_version(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
 
-        self.assertIn("resolve_manifest_hugo.py", workflow)
+        self.assertIn("resolve_deployment_profile.py", workflow)
         self.assertIn("--manifest docs/homepage-sites-manifest.yaml", workflow)
         self.assertNotIn('hugo_version="0.162.0"', workflow)
-        self.assertIn('echo "hugo_version=$hugo_version"', workflow)
         self.assertIn('HUGO_VERSION: ${{ steps.map.outputs.hugo_version }}', workflow)
         self.assertIn('hugo_extended_withdeploy_${HUGO_VERSION}_linux-amd64.tar.gz', workflow)
         self.assertIn('hugo_extended_${HUGO_VERSION}_Linux-64bit.tar.gz', workflow)
+
+    def test_deployment_profiles_preserve_current_cache_and_credential_contracts(self) -> None:
+        data = json.loads(
+            (ROOT / ".github" / "deployment-profiles.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(1, data["schema_version"])
+        self.assertEqual(
+            {
+                "aspose.com",
+                "aspose.cloud",
+                "aspose.app",
+                "aspose.ai",
+                "aspose.net",
+                "aspose.org",
+                "groupdocs.com",
+                "groupdocs.cloud",
+                "groupdocs.app",
+                "conholdate.com",
+                "conholdate.cloud",
+            },
+            set(data["sites"]),
+        )
+        for site in data["sites"].values():
+            self.assertEqual({"qa", "production"}, set(site))
+        self.assertEqual(
+            {"kind": "bunny", "url": "https://www.aspose.org/*"},
+            data["sites"]["aspose.org"]["production"]["cache"],
+        )
+        self.assertEqual(
+            {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.app"},
+            data["sites"]["groupdocs.app"]["qa"]["cache"],
+        )
+        self.assertEqual(
+            {"kind": "none"},
+            data["sites"]["conholdate.cloud"]["production"]["cache"],
+        )
+
+    def test_deployment_profile_resolves_manifest_config_and_profile_targets(self) -> None:
+        manifest = """sites:
+  example.com:
+    production_config: config/production.toml
+    stage_config: config/stage.toml
+    production_hugo: 0.162.0
+    stage_hugo: 0.161.1
+    deploy:
+      production_targets:
+        - Production
+        - Production-www
+      stage_target: Stage
+"""
+        profiles = {
+            "schema_version": 1,
+            "sites": {
+                "example.com": {
+                    "qa": {
+                        "credential_set": "ceph_qa",
+                        "targets": ["Stage"],
+                        "cache": {"kind": "bunny", "url": "https://qa.example.com/*"},
+                    },
+                    "production": {
+                        "credential_set": "sl",
+                        "targets": ["Production", "Production-www"],
+                        "cache": {"kind": "cloudfront", "alias": "www.example.com"},
+                    },
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "stage.toml").write_text(
+                '[[deployment.targets]]\nname = "Stage"\nURL = "s3://qa"\n',
+                encoding="utf-8",
+            )
+            (root / "config" / "production.toml").write_text(
+                '[[deployment.targets]]\nname = "Production"\nURL = "s3://www"\n'
+                '[[deployment.targets]]\nname = "Production-www"\nURL = "s3://www2"\n',
+                encoding="utf-8",
+            )
+            qa = PROFILE_MODULE.resolve_profile(
+                manifest_text=manifest,
+                profiles=profiles,
+                config_root=root,
+                site="example.com",
+                environment="qa",
+            )
+            production = PROFILE_MODULE.resolve_profile(
+                manifest_text=manifest,
+                profiles=profiles,
+                config_root=root,
+                site="example.com",
+                environment="production",
+            )
+        self.assertEqual("config/stage.toml", qa["config"])
+        self.assertEqual("Stage", qa["targets"])
+        self.assertEqual("0.161.1", qa["hugo_version"])
+        self.assertEqual("Production,Production-www", production["targets"])
+        self.assertEqual("www.example.com", production["cache_alias"])
+
+    def test_deployment_profile_rejects_unknown_site_missing_target_and_invalid_cache(self) -> None:
+        manifest = """sites:
+  example.com:
+    production_config: config/site.toml
+    stage_config: config/site.toml
+    production_hugo: 0.162.0
+    stage_hugo: 0.162.0
+    deploy:
+      production_targets:
+        - Missing
+      stage_target: Missing
+"""
+        profiles = {
+            "schema_version": 1,
+            "sites": {
+                "example.com": {
+                    "qa": {
+                        "credential_set": "sl",
+                        "targets": ["Missing"],
+                        "cache": {"kind": "cloudfront", "alias": "a", "variable": "B"},
+                    },
+                    "production": {
+                        "credential_set": "sl",
+                        "targets": ["Present"],
+                        "cache": {"kind": "none"},
+                    },
+                }
+            },
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "config").mkdir()
+            (root / "config" / "site.toml").write_text(
+                '[[deployment.targets]]\nname = "Present"\nURL = "s3://target"\n',
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "not registered"):
+                PROFILE_MODULE.resolve_profile(
+                    manifest_text=manifest,
+                    profiles=profiles,
+                    config_root=root,
+                    site="unknown.example",
+                    environment="qa",
+                )
+            with self.assertRaisesRegex(ValueError, "target.*missing"):
+                PROFILE_MODULE.resolve_profile(
+                    manifest_text=manifest,
+                    profiles=profiles,
+                    config_root=root,
+                    site="example.com",
+                    environment="qa",
+                )
+            profiles["sites"]["example.com"]["qa"]["targets"] = ["Present"]
+            with self.assertRaisesRegex(ValueError, "needs one selector"):
+                PROFILE_MODULE.resolve_profile(
+                    manifest_text=manifest,
+                    profiles=profiles,
+                    config_root=root,
+                    site="example.com",
+                    environment="qa",
+                )
 
     def test_manifest_hugo_resolver_uses_exact_site_environment_contract(self) -> None:
         manifest = """sites:

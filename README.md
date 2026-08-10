@@ -51,7 +51,7 @@ All schedules use UTC.
 
 | Input | Meaning | Default |
 | --- | --- | --- |
-| `site` | One listed homepage domain. | Required |
+| `site` | One registered homepage domain with a committed deployment profile. | Required |
 | `environment` | `qa` or `production`. | Required |
 | `ref` | Branch, tag, or SHA in `conholdate/homepages`. Prefer an exact SHA. | `main` |
 | `deploy` | Publish after the build. | `false` |
@@ -61,16 +61,17 @@ All schedules use UTC.
 | `identity_run_id` | Original governed deployment run containing the identity artifact. | Empty |
 | `identity_run_attempt` | Original governed deployment attempt containing the identity artifact. | Empty |
 
-Supported workflow choices are:
+Current registered deployment profiles are:
 
 - Aspose: `aspose.com`, `aspose.cloud`, `aspose.app`, `aspose.ai`,
   `aspose.net`, and `aspose.org`;
 - GroupDocs: `groupdocs.com`, `groupdocs.cloud`, and `groupdocs.app`;
-- Conholdate: `conholdate.com`, `conholdate.cloud`, and `conholdate.app`.
+- Conholdate: `conholdate.com` and `conholdate.cloud`.
 
-A choice in this workflow means a build/deploy mapping exists. It does not by
-itself mean that the site is fully onboarded or available to ordinary Agent
-users; that status comes from the Homepages site manifest.
+The workflow accepts a site string, then validates it against both the checked-out
+Homepages manifest and `.github/deployment-profiles.json`. Adding a site requires
+a manifest entry and a deployment profile; unregistered strings fail before build
+or deployment. Lifecycle availability still comes from the Homepages manifest.
 
 ### Execution Contract
 
@@ -79,7 +80,9 @@ The workflow:
 1. checks out this repository for workflow support;
 2. checks out the requested `conholdate/homepages` ref;
 3. resolves the checkout to an exact source SHA;
-4. selects the site/environment config, target, credentials, and cache mapping;
+4. resolves config from the Homepages manifest, combines it with the committed
+   targets/credentials/cache profile, and verifies every target exists in the
+   selected TOML config;
 5. resolves the exact QA or production Hugo pin from the checked-out site
    manifest, installs that Hugo Extended version, and builds the site;
 6. writes and uploads deployment identity evidence;
@@ -87,9 +90,11 @@ The workflow:
    `.well-known` identity file to every selected S3 target;
 8. invalidates mapped cache only when requested.
 
-The checked-out `docs/homepage-sites-manifest.yaml` is the Hugo runtime source
-of truth. The workflow fails before build or deployment when the selected site
-has no unique semantic-version pin for the requested environment.
+The checked-out `docs/homepage-sites-manifest.yaml` is the site, config, and
+Hugo runtime source of truth. `.github/deployment-profiles.json` owns deploy
+targets, credential selection, and cache behavior. The workflow fails before build or
+deployment when the selected site has no unique semantic-version pin for the
+requested environment.
 
 Deploys are serialized by destination:
 
