@@ -7,20 +7,7 @@ on:
       site:
         description: Homepage site to build or deploy
         required: true
-        type: choice
-        options:
-          - aspose.com
-          - aspose.cloud
-          - aspose.app
-          - aspose.ai
-          - aspose.net
-          - aspose.org
-          - groupdocs.com
-          - groupdocs.cloud
-          - groupdocs.app
-          - conholdate.com
-          - conholdate.cloud
-          - conholdate.app
+        type: string
       environment:
         description: Target environment
         required: true
@@ -123,205 +110,17 @@ jobs:
             exit 1
           fi
 
-      - name: Resolve site deployment map
+      - name: Resolve registered deployment profile
         id: map
         shell: bash
         run: |
           set -euo pipefail
-
-          site="${{ inputs.site }}"
-          environment="${{ inputs.environment }}"
-
-          case "${site}:${environment}" in
-            aspose.com:qa)
-              config="config/config-stage-aspose-com.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.com:production)
-              config="config/config-aspose-com.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.cloud:qa)
-              config="config/config-stage-aspose-cloud.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.cloud:production)
-              config="config/config-aspose-cloud.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_CLOUD_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.app:qa)
-              config="config/config-stage-aspose-app.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_APP_QA_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.app:production)
-              config="config/config-aspose-app.toml"
-              targets="Production,Production-www"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.ai:qa)
-              config="config/config-stage-aspose-ai.toml"
-              targets="Staging"
-              credential_set="homepages"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.ai:production)
-              config="config/config-aspose-ai.toml"
-              targets="Production"
-              credential_set="homepages"
-              cache_kind="cloudfront"
-              cache_variable="ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            aspose.net:qa)
-              config="config/config-stage-aspose-net.toml"
-              targets="staging_ceph"
-              credential_set="ceph_qa"
-              cache_kind="bunny"
-              cache_url="https://qa.aspose.net/*"
-              ;;
-            aspose.net:production)
-              config="config/config-aspose-net.toml"
-              targets="production_ceph"
-              credential_set="ceph_production"
-              cache_kind="bunny"
-              cache_url="https://www.aspose.net/*"
-              ;;
-            aspose.org:qa)
-              config="config/config-stage-aspose-org.toml"
-              targets="staging_ceph"
-              credential_set="ceph_qa"
-              cache_kind="bunny"
-              cache_url="https://qa.aspose.org/*"
-              ;;
-            aspose.org:production)
-              config="config/config-aspose-org.toml"
-              targets="production_ceph"
-              credential_set="ceph_production"
-              cache_kind="bunny"
-              cache_url="https://www.aspose.org/*"
-              ;;
-            groupdocs.com:qa)
-              config="config/config-stage-groupdocs-com.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront-deploy-account"
-              cache_alias="qa.groupdocs.com"
-              ;;
-            groupdocs.com:production)
-              config="config/config-groupdocs-com.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="cloudfront-deploy-account"
-              cache_alias="www.groupdocs.com"
-              ;;
-            groupdocs.cloud:qa)
-              config="config/config-stage-groupdocs-cloud.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront-deploy-account"
-              cache_alias="qa.groupdocs.cloud"
-              ;;
-            groupdocs.cloud:production)
-              config="config/config-groupdocs-cloud.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="cloudfront-deploy-account"
-              cache_alias="www.groupdocs.cloud"
-              ;;
-            groupdocs.app:qa)
-              config="config/config-stage-groupdocs-app.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront-deploy-account"
-              cache_alias="qa.groupdocs.app"
-              ;;
-            groupdocs.app:production)
-              config="config/config-groupdocs-app.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="cloudfront-deploy-account"
-              cache_alias="www.groupdocs.app"
-              ;;
-            conholdate.com:qa)
-              config="config/config-stage-conholdate-com.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_alias="qa.conholdate.com"
-              ;;
-            conholdate.com:production)
-              config="config/config-conholdate-com.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="none"
-              ;;
-            conholdate.cloud:qa)
-              config="config/config-stage-conholdate-cloud.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="cloudfront"
-              cache_variable="CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"
-              ;;
-            conholdate.cloud:production)
-              config="config/config-conholdate-cloud.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="none"
-              ;;
-            conholdate.app:qa)
-              config="config/config-stage-conholdate-app.toml"
-              targets="Stage"
-              credential_set="sl"
-              cache_kind="none"
-              ;;
-            conholdate.app:production)
-              config="config/config-conholdate-app.toml"
-              targets="Production"
-              credential_set="sl"
-              cache_kind="none"
-              ;;
-            *)
-              echo "::error::Unsupported site/environment: ${site}/${environment}"
-              exit 1
-              ;;
-          esac
-
-          if [ ! -f "$config" ]; then
-            echo "::error::Config not found in conholdate/homepages: $config"
-            exit 1
-          fi
-          hugo_version="$(python ../workflow-support/.github/scripts/resolve_manifest_hugo.py \
+          python ../workflow-support/.github/scripts/resolve_deployment_profile.py \
             --manifest docs/homepage-sites-manifest.yaml \
-            --site "$site" \
-            --environment "$environment")"
-
-          {
-            echo "config=$config"
-            echo "targets=$targets"
-            echo "credential_set=$credential_set"
-            echo "cache_kind=$cache_kind"
-            echo "cache_variable=${cache_variable:-}"
-            echo "cache_alias=${cache_alias:-}"
-            echo "cache_url=${cache_url:-}"
-            echo "hugo_version=$hugo_version"
-          } >> "$GITHUB_OUTPUT"
+            --profiles ../workflow-support/.github/scripts/deployment-profiles.json \
+            --config-root . \
+            --site "${{ inputs.site }}" \
+            --environment "${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
 
       - name: Setup Hugo
         if: ${{ !inputs.reconcile_identity }}

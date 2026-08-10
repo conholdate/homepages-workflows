@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "sites": {
+    "aspose.com": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_COM_QA_CLOUDFRONT_DISTRIBUTION_ID"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_COM_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"}
+      }
+    },
+    "aspose.cloud": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_CLOUD_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"}
+      }
+    },
+    "aspose.app": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_APP_QA_CLOUDFRONT_DISTRIBUTION_ID"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production", "Production-www"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_APP_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"}
+      }
+    },
+    "aspose.ai": {
+      "qa": {
+        "credential_set": "homepages",
+        "targets": ["Staging"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID"}
+      },
+      "production": {
+        "credential_set": "homepages",
+        "targets": ["Production"],
+        "cache": {"kind": "cloudfront", "variable": "ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"}
+      }
+    },
+    "aspose.net": {
+      "qa": {
+        "credential_set": "ceph_qa",
+        "targets": ["staging_ceph"],
+        "cache": {"kind": "bunny", "url": "https://qa.aspose.net/*"}
+      },
+      "production": {
+        "credential_set": "ceph_production",
+        "targets": ["production_ceph"],
+        "cache": {"kind": "bunny", "url": "https://www.aspose.net/*"}
+      }
+    },
+    "aspose.org": {
+      "qa": {
+        "credential_set": "ceph_qa",
+        "targets": ["staging_ceph"],
+        "cache": {"kind": "bunny", "url": "https://qa.aspose.org/*"}
+      },
+      "production": {
+        "credential_set": "ceph_production",
+        "targets": ["production_ceph"],
+        "cache": {"kind": "bunny", "url": "https://www.aspose.org/*"}
+      }
+    },
+    "groupdocs.com": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.com"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.com"}
+      }
+    },
+    "groupdocs.cloud": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.cloud"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.cloud"}
+      }
+    },
+    "groupdocs.app": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.app"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.app"}
+      }
+    },
+    "conholdate.com": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront", "alias": "qa.conholdate.com"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "none"}
+      }
+    },
+    "conholdate.cloud": {
+      "qa": {
+        "credential_set": "sl",
+        "targets": ["Stage"],
+        "cache": {"kind": "cloudfront", "variable": "CONHOLDATE_CLOUD_QA_CLOUDFRONT_DISTRIBUTION_ID"}
+      },
+      "production": {
+        "credential_set": "sl",
+        "targets": ["Production"],
+        "cache": {"kind": "none"}
+      }
+    }
+  }
+}
