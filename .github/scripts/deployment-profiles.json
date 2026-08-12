@@ -144,6 +144,28 @@
         "targets": ["Production"],
         "cache": {"kind": "none"}
       }
+    },
+    "launch-proof.aspose.xyz": {
+      "qa": {
+        "credential_set": "ceph_qa",
+        "targets": [
+          "staging_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://qa.launch-proof.aspose.xyz/*"
+        }
+      },
+      "production": {
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://www.launch-proof.aspose.xyz/*"
+        }
+      }
     }
-  }
+}
 }
