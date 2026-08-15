@@ -144,6 +144,26 @@
         "targets": ["Production"],
         "cache": {"kind": "none"}
       }
+    },
+    "wordpress-proof-6.aspose.xyz": {
+      "qa": {
+        "credential_set": "ceph_qa",
+        "targets": [
+          "staging_ceph"
+        ],
+        "cache": {
+          "kind": "none"
+        }
+      },
+      "production": {
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "none"
+        }
+      }
     }
-  }
+}
 }
