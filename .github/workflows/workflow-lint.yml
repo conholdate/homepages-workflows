@@ -61,3 +61,7 @@ jobs:
       - name: Check deploy workflow concurrency contract
         shell: bash
         run: bash .github/scripts/test-deploy-homepage-concurrency.sh
+
+      - name: Check metrics refresh production boundary
+        shell: bash
+        run: bash .github/scripts/test-metrics-refresh-production-boundary.sh
