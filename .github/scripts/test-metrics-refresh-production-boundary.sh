@@ -9,7 +9,7 @@ grep -q 'Synchronize QA homepage deployments' "${workflow}"
 grep -q 'environment=qa' "${workflow}"
 grep -q 'Refresh production metrics from exact live sources' "${workflow}"
 grep -q 'public_production_source' "${workflow}"
-grep -q 'git checkout -B production-metrics-refresh "${current_production_sha}"' "${workflow}"
+grep -Fq "git checkout -B production-metrics-refresh \"\${current_production_sha}\"" "${workflow}"
 grep -q 'metrics-refresh-site-scope-guard.sh' "${workflow}"
 grep -q 'environment=production' "${workflow}"
 
