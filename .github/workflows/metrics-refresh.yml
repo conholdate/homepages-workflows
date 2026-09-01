@@ -469,7 +469,7 @@ jobs:
             git clean -fd -- "data/metrics/${site}.json"
             git checkout "${METRICS_SOURCE_SHA}" -- "data/metrics/${site}.json"
             mapfile -t changed_paths < <(git diff --cached --name-only)
-            "${workflows_repo}/.github/scripts/metrics-refresh-site-scope-guard.sh" \
+            bash "${workflows_repo}/.github/scripts/metrics-refresh-site-scope-guard.sh" \
               "${site}" "${changed_paths[@]}"
 
             if git diff --cached --quiet; then
