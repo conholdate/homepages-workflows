@@ -20,12 +20,12 @@ for forbidden in 'refresh_branch main' 'steps.refresh.outputs.main_sha'; do
   fi
 done
 
-"${site_guard}" aspose.ai data/metrics/aspose.ai.json
+bash "${site_guard}" aspose.ai data/metrics/aspose.ai.json
 for forbidden in \
   data/metrics/aspose.app.json \
   data/products.json \
   themes/homepage-v2-theme/layouts/partials/structured-home-claude-inspired-v1.html; do
-  if "${site_guard}" aspose.ai "${forbidden}" >/tmp/metrics-refresh-site-guard.out 2>&1; then
+  if bash "${site_guard}" aspose.ai "${forbidden}" >/tmp/metrics-refresh-site-guard.out 2>&1; then
     echo "Expected ${forbidden} to fail the exact-site production guard"
     exit 1
   fi
@@ -52,6 +52,6 @@ metrics_source_sha="$(git -C "${tmp_repo}" rev-parse HEAD)"
 git -C "${tmp_repo}" checkout -q "${production_sha}"
 git -C "${tmp_repo}" checkout "${metrics_source_sha}" -- data/metrics/aspose.ai.json
 mapfile -t changed_paths < <(git -C "${tmp_repo}" diff --cached --name-only)
-"${site_guard}" aspose.ai "${changed_paths[@]}"
+bash "${site_guard}" aspose.ai "${changed_paths[@]}"
 test "$(cat "${tmp_repo}/data/metrics/aspose.ai.json")" = "new-metrics"
 test "$(cat "${tmp_repo}/themes/homepage-v2-theme/layouts/partials/structured-home-claude-inspired-v1.html")" = "live-renderer"
