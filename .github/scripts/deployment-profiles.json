@@ -44,9 +44,14 @@
         "cache": {"kind": "cloudfront", "variable": "ASPOSE_AI_QA_CLOUDFRONT_DISTRIBUTION_ID"}
       },
       "production": {
-        "credential_set": "homepages",
-        "targets": ["Production"],
-        "cache": {"kind": "cloudfront", "variable": "ASPOSE_AI_PRODUCTION_CLOUDFRONT_DISTRIBUTION_ID"}
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://www.aspose.ai/*"
+        }
       }
     },
     "aspose.net": {
