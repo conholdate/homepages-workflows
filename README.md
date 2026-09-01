@@ -37,7 +37,7 @@ transaction_id: <empty>
 | `agent-pr-autopilot.yml` | Manual | Review, and optionally merge, an Agent PR through the shared guard. |
 | `homepages-pr-autopilot.yml` | Manual | Review, and optionally merge, a Homepages PR through the shared guard. |
 | `guarded-pr-autopilot.yml` | Reusable call | Shared implementation used by both PR wrappers. |
-| `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose product/metric data and synchronize approved deployments. |
+| `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose metrics on QA and rebuild production from each site's exact live source. |
 | `groupdocs-data-refresh.yml` | Schedule/manual | Bake one GroupDocs site's metrics and blog data, then refresh its exact active QA source. |
 | `homepages-agent-heartbeat.yml` | Every hour at `:07` and `:37` UTC/manual | Produce Aspose coordination, validation, readiness, and metric evidence. |
 | `homepages-agent-menu-health.yml` | Daily at `03:17` UTC/manual | Refresh and commit Agent menu-health reports. |
@@ -182,20 +182,20 @@ deployment. Every changed site is then verified for exact identity and
 
 ### Production Metrics Gate
 
-A manual run updates `main` and production only when
-`deploy_production=true`. A scheduled run does so only when:
+A manual run refreshes production only when `deploy_production=true`. A
+scheduled run does so only when:
 
 ```text
 METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED=true
 ```
 
-When a main metrics commit is created, the workflow deploys only successfully
-refreshed Aspose sites at the exact commit, waits for every run, verifies every
-public identity, and confirms `main` did not move during the rollout. No metrics
-change means no production deployment.
-
-This exception lane grants no unattended content, UI, config, theme, GroupDocs,
-or Conholdate publishing authority.
+For each successfully refreshed site, the workflow reads the exact source SHA
+currently served by production, applies only that site's refreshed
+`data/metrics/<site>.json`, and rejects every other changed path. It rebuilds
+and deploys that exact derived commit, then verifies the public production
+identity. It never builds a scheduled production deployment from `main`, so
+unrelated content, configuration, theme, renderer, and product-catalog changes
+cannot ride with a metrics refresh.
 
 ## GroupDocs Data Refresh
 
