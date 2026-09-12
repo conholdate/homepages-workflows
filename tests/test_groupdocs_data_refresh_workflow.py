@@ -28,12 +28,16 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertNotIn("metrics-validate", self.workflow)
         self.assertIn('resource-feed-bake --feed "${key}"', self.workflow)
 
-    def test_commit_and_deploy_are_qa_only_and_path_scoped(self) -> None:
+    def test_qa_refresh_is_scoped_and_production_uses_shared_exact_live_publisher(self) -> None:
         self.assertIn('metric_path="data/metrics/${SITE}.json"', self.workflow)
         self.assertIn('feed_path="data/homepage_resource_feeds/${key}.json"', self.workflow)
         self.assertIn('"${metric_path}"|"${feed_path}")', self.workflow)
         self.assertIn('-f "environment=qa"', self.workflow)
-        self.assertNotIn("environment=production", self.workflow)
+        self.assertIn("github.event_name == 'schedule' || inputs.deploy_production", self.workflow)
+        self.assertIn("default: false", self.workflow)
+        self.assertIn("METRICS_SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}", self.workflow)
+        self.assertIn("METRICS_REFRESH_SITES: ${{ steps.select.outputs.site }}", self.workflow)
+        self.assertIn("run: bash workflows/.github/scripts/refresh-production-metrics.sh", self.workflow)
 
     def test_active_request_candidate_receives_only_refreshed_generated_data(self) -> None:
         self.assertIn(

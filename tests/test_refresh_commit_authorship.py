@@ -54,8 +54,10 @@ class RefreshCommitAuthorshipTests(unittest.TestCase):
     def test_ha_30abc04807c05266_every_generated_commit_passes_real_git_trailers(self) -> None:
         bash = (r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else shutil.which("bash"))
         self.assertTrue(bash and Path(bash).is_file(), "Bash is required for workflow proof")
-        for filename, expected_count in (("metrics-refresh.yml", 3), ("groupdocs-data-refresh.yml", 1)):
-            workflow = (ROOT / ".github/workflows" / filename).read_text(encoding="utf-8")
+        for filename, expected_count in (("workflows/metrics-refresh.yml", 2),
+                                         ("workflows/groupdocs-data-refresh.yml", 1),
+                                         ("scripts/refresh-production-metrics.sh", 1)):
+            workflow = (ROOT / ".github" / filename).read_text(encoding="utf-8")
             commands = re.findall(r"(?m)^[ \t]*git commit \\\n(?:[ \t]+-m[^\n]*(?:\n|$))+", workflow)
             self.assertEqual(len(commands), expected_count)
             for index, command in enumerate(commands):

@@ -38,7 +38,7 @@ transaction_id: <empty>
 | `homepages-pr-autopilot.yml` | Manual | Review, and optionally merge, a Homepages PR through the shared guard. |
 | `guarded-pr-autopilot.yml` | Reusable call | Shared implementation used by both PR wrappers. |
 | `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose metrics on QA and rebuild production from each site's exact live source. |
-| `groupdocs-data-refresh.yml` | Schedule/manual | Bake one GroupDocs site's metrics and blog data, then refresh its exact active QA source. |
+| `groupdocs-data-refresh.yml` | Schedule/manual | Refresh one GroupDocs site's active QA data and rebuild production with metrics only from its exact live source. |
 | `homepages-agent-heartbeat.yml` | Every hour at `:07` and `:37` UTC/manual | Produce Aspose coordination, validation, readiness, and metric evidence. |
 | `homepages-agent-menu-health.yml` | Daily at `03:17` UTC/manual | Refresh and commit Agent menu-health reports. |
 | `workflow-lint.yml` | Workflow/script PR or main push/manual | Run `actionlint`, `shellcheck`, and the deployment concurrency contract test. |
@@ -214,18 +214,21 @@ upstream GroupDocs metrics cycle:
 | `groupdocs.app` | `01:15`, `09:15`, `17:15` | Data Processed |
 
 Each scheduled run fetches one site's approved endpoint once, commits only that
-site's registered data files, and deploys only that QA homepage. Pause a
+site's registered data files, and refreshes both QA and production. Pause a
 schedule explicitly through the GitHub Actions workflow state; there is no
 hidden repository-variable gate. When that homepage has an active Request-to-QA
 candidate, the workflow bakes that selected site's generated
 metrics/resource-feed files directly on the exact candidate branch and
-redeploys it; authored content and renderer files remain unchanged. It never
-deploys production.
+redeploys it; authored content and renderer files remain unchanged.
 
-All three GroupDocs homepages are managed through the governed production and
-rollback lifecycle. Scheduled GroupDocs data refresh remains deliberately
-QA-only until a separate production-refresh policy is explicitly approved;
-managed status alone does not grant that scheduler production authority.
+Production uses the same exact-live-parent publisher as Aspose. It copies only
+`data/metrics/<site>.json`, not QA content, themes, configuration, or blog feeds;
+every other staged path is rejected. The derived commit is deployed and its
+public identity verified. QA and production retain independent source identities.
+Production metrics run before QA deployment, so a QA deploy failure cannot skip
+the already-prepared production update. Manual runs remain QA-only unless
+`deploy_production=true`; scheduled runs always refresh both under the approved
+GroupDocs production-metrics policy.
 
 ## Agent CI And PR Review
 
