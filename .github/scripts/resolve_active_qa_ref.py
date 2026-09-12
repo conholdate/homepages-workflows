@@ -13,6 +13,7 @@ QA_REF_PREFIXES = (
     "refs/heads/codex/",
     "refs/heads/homepages-agent/",
 )
+IMMUTABLE_CEPH_REF_PREFIX = "refs/heads/codex/ceph-migration-"
 
 
 def resolve_ref(
@@ -24,6 +25,8 @@ def resolve_ref(
         raise ValueError(f"Aggregate QA ref is not a branch: {aggregate_ref}")
     if recovery_ref and not recovery_ref.startswith(QA_REF_PREFIXES):
         raise ValueError(f"Recovery QA ref is outside the managed namespace: {recovery_ref}")
+    if any(ref.startswith(IMMUTABLE_CEPH_REF_PREFIX) for ref in (aggregate_ref, recovery_ref)):
+        raise ValueError("Ceph migration refs are immutable action-owned candidates")
 
     exact_refs: list[str] = []
     for line in lines:
@@ -40,6 +43,7 @@ def resolve_ref(
         ref
         for ref in exact_refs
         if ref != "refs/heads/main" and ref.startswith(QA_REF_PREFIXES)
+        and not ref.startswith(IMMUTABLE_CEPH_REF_PREFIX)
     )
     if len(candidates) == 1:
         return candidates[0]

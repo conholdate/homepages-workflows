@@ -154,9 +154,7 @@ jobs:
 
             git commit \
               -m "Refresh baked metrics (scheduled)" \
-              -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
-              -m "Co-authored-by: Codex <codex@openai.com>" \
-              -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+              -m $'Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>\nCo-authored-by: Codex <codex@openai.com>\nCo-authored-by: Homepages Agent <homepages.agent@conholdate.com>'
             git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" push origin "HEAD:${branch}"
             {
               printf '%s=true\n' "${changed_var}"
@@ -289,9 +287,7 @@ jobs:
               else
                 git commit \
                   -m "Refresh ${site} baked metrics" \
-                  -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
-                  -m "Co-authored-by: Codex <codex@openai.com>" \
-                  -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+                  -m $'Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>\nCo-authored-by: Codex <codex@openai.com>\nCo-authored-by: Homepages Agent <homepages.agent@conholdate.com>'
                 candidate_sha="$(git rev-parse HEAD)"
                 lease="${candidate_ref}:"
                 if [ -n "${candidate_remote_sha}" ]; then
@@ -478,9 +474,7 @@ jobs:
             else
               git commit \
                 -m "Refresh ${site} production metrics" \
-                -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
-                -m "Co-authored-by: Codex <codex@openai.com>" \
-                -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+                -m $'Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>\nCo-authored-by: Codex <codex@openai.com>\nCo-authored-by: Homepages Agent <homepages.agent@conholdate.com>'
               candidate_sha="$(git rev-parse HEAD)"
               lease="${candidate_ref}:"
               if [ -n "${candidate_remote_sha}" ]; then
