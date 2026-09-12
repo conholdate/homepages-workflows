@@ -173,9 +173,7 @@ jobs:
 
           git commit \
             -m "Refresh ${SITE} baked homepage data" \
-            -m "Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>" \
-            -m "Co-authored-by: Codex <codex@openai.com>" \
-            -m "Co-authored-by: Homepages Agent <homepages.agent@conholdate.com>"
+            -m $'Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>\nCo-authored-by: Codex <codex@openai.com>\nCo-authored-by: Homepages Agent <homepages.agent@conholdate.com>'
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             push --force-with-lease="${target_ref}:${before_sha}" origin "HEAD:${target_ref}"
           {

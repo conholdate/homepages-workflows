@@ -65,3 +65,9 @@ jobs:
       - name: Check metrics refresh production boundary
         shell: bash
         run: bash .github/scripts/test-metrics-refresh-production-boundary.sh
+
+      - name: Check refresh commit authorship and immutable migration refs
+        shell: bash
+        run: |
+          python -m unittest discover -s tests -p test_refresh_commit_authorship.py
+          python -m unittest discover -s tests -p test_resolve_active_qa_ref.py

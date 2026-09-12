@@ -180,6 +180,11 @@ unregistered paths, concurrent QA changes, or ambiguous refs stop before
 deployment. Every changed site is then verified for exact identity and
 `noindex`.
 
+Ceph-migration branches are frozen to their confirmed action SHA. Scheduled QA
+refreshes use the existing site-owned recovery ref instead of appending to a
+migration PR. All generated refresh commits carry the required co-authors in
+one contiguous final trailer block, including production and GroupDocs refreshes.
+
 ### Production Metrics Gate
 
 A manual run refreshes production only when `deploy_production=true`. A
