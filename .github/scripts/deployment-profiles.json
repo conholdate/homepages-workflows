@@ -127,38 +127,68 @@
     },
     "groupdocs.com": {
       "qa": {
-        "credential_set": "sl",
-        "targets": ["Stage"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.com"}
+        "credential_set": "ceph_qa",
+        "targets": [
+          "staging_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://qa.groupdocs.com/*"
+        }
       },
       "production": {
-        "credential_set": "sl",
-        "targets": ["Production"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.com"}
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://www.groupdocs.com/*"
+        }
       }
     },
     "groupdocs.cloud": {
       "qa": {
-        "credential_set": "sl",
-        "targets": ["Stage"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.cloud"}
+        "credential_set": "ceph_qa",
+        "targets": [
+          "staging_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://qa.groupdocs.cloud/*"
+        }
       },
       "production": {
-        "credential_set": "sl",
-        "targets": ["Production"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.cloud"}
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://www.groupdocs.cloud/*"
+        }
       }
     },
     "groupdocs.app": {
       "qa": {
-        "credential_set": "sl",
-        "targets": ["Stage"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.app"}
+        "credential_set": "ceph_qa",
+        "targets": [
+          "staging_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://qa.groupdocs.app/*"
+        }
       },
       "production": {
-        "credential_set": "sl",
-        "targets": ["Production"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.app"}
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://www.groupdocs.app/*"
+        }
       }
     },
     "conholdate.com": {
