@@ -4,17 +4,21 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 workflow="${script_dir}/../workflows/metrics-refresh.yml"
 site_guard="${script_dir}/metrics-refresh-site-scope-guard.sh"
+publisher="${script_dir}/refresh-production-metrics.sh"
+groupdocs_workflow="${script_dir}/../workflows/groupdocs-data-refresh.yml"
 
 grep -q 'Synchronize QA homepage deployments' "${workflow}"
 grep -q 'environment=qa' "${workflow}"
 grep -q 'Refresh production metrics from exact live sources' "${workflow}"
-grep -q 'public_production_source' "${workflow}"
-grep -Fq "git checkout -B production-metrics-refresh \"\${current_production_sha}\"" "${workflow}"
-grep -q 'metrics-refresh-site-scope-guard.sh' "${workflow}"
-grep -q 'environment=production' "${workflow}"
+grep -q 'refresh-production-metrics.sh' "${workflow}"
+grep -q 'refresh-production-metrics.sh' "${groupdocs_workflow}"
+grep -q 'public_production_source' "${publisher}"
+grep -Fq "git checkout -B production-metrics-refresh \"\${current_production_sha}\"" "${publisher}"
+grep -q 'metrics-refresh-site-scope-guard.sh' "${publisher}"
+grep -q 'environment=production' "${publisher}"
 
 for forbidden in 'refresh_branch main' 'steps.refresh.outputs.main_sha'; do
-  if grep -q "${forbidden}" "${workflow}"; then
+  if grep -q "${forbidden}" "${workflow}" "${publisher}" "${groupdocs_workflow}"; then
     echo "Production metrics refresh must not derive from main: ${forbidden}"
     exit 1
   fi

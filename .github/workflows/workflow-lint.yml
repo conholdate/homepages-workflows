@@ -71,3 +71,7 @@ jobs:
         run: |
           python -m unittest discover -s tests -p test_refresh_commit_authorship.py
           python -m unittest discover -s tests -p test_resolve_active_qa_ref.py
+
+      - name: Check exact-live production metrics publisher
+        shell: bash
+        run: python -m unittest discover -s tests -p test_production_metrics_refresh.py
