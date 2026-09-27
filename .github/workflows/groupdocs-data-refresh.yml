@@ -133,14 +133,18 @@ jobs:
           fi
           remote_heads="$(git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
             ls-remote --heads https://github.com/conholdate/homepages.git)"
+          # D-068: a frozen migration ref is never written; fall back to the
+          # site's own refresh branch, created from the exact live QA if missing.
+          recovery_ref="refs/heads/homepages-agent/qa-refresh/${SITE}"
           target_ref="$(printf '%s\n' "${remote_heads}" | python \
             "${GITHUB_WORKSPACE}/workflows/.github/scripts/resolve_active_qa_ref.py" \
-            --sha "${current_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}")"
-          target_branch="${target_ref#refs/heads/}"
-          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            fetch origin "+${target_ref}:refs/remotes/origin/${target_branch}"
+            --sha "${current_sha}" --aggregate-ref "refs/heads/${HOMEPAGES_QA_SOURCE_REF}" \
+            --recovery-ref "${recovery_ref}")"
+          target_remote_sha="$(awk -v ref="${target_ref}" '$2 == ref {print $1}' <<<"${remote_heads}")"
           echo "Baking generated data directly on exact active QA source ${target_ref} at ${current_sha}."
-          git checkout -B active-qa-data-refresh "origin/${target_branch}"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            fetch origin "${current_sha}"
+          git checkout -B active-qa-data-refresh "${current_sha}"
           before_sha="$(git rev-parse HEAD)"
           if [ "${before_sha}" != "${current_sha}" ]; then
             echo "::error::Selected QA data target does not match public QA: target ${before_sha}, public ${current_sha}"
@@ -180,7 +184,7 @@ jobs:
             -m "Refresh ${SITE} baked homepage data" \
             -m $'Co-authored-by: salmansarfraz <kh.salman.sarfraz@gmail.com>\nCo-authored-by: Codex <codex@openai.com>\nCo-authored-by: Homepages Agent <homepages.agent@conholdate.com>'
           git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
-            push --force-with-lease="${target_ref}:${before_sha}" origin "HEAD:${target_ref}"
+            push --force-with-lease="${target_ref}:${target_remote_sha}" origin "HEAD:${target_ref}"
           {
             echo "changed=true"
             echo "before_sha=${before_sha}"
