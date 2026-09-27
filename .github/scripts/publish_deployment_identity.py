@@ -10,7 +10,9 @@ from urllib.parse import parse_qs, urlsplit
 PUBLIC_IDENTITY_PATH = ".well-known/homepages-deployment.json"
 
 
-def upload_command(*, config: Path, target_name: str, identity: Path) -> list[str]:
+def identity_object(*, config: Path, target_name: str) -> tuple[str, list[str]]:
+    """Return the identity object's s3 URI and the endpoint/region arguments for a target."""
+
     data = tomllib.loads(config.read_text(encoding="utf-8-sig"))
     deployment = data.get("deployment")
     targets = deployment.get("targets") if isinstance(deployment, dict) else None
@@ -33,26 +35,32 @@ def upload_command(*, config: Path, target_name: str, identity: Path) -> list[st
 
     prefix = parsed.path.strip("/")
     key = "/".join(part for part in (prefix, PUBLIC_IDENTITY_PATH) if part)
-    command = [
-        "aws",
-        "s3",
-        "cp",
-        str(identity),
-        f"s3://{parsed.netloc}/{key}",
-        "--content-type",
-        "application/json",
-        "--cache-control",
-        "no-store, max-age=0",
-    ]
+    extra: list[str] = []
     endpoint = (query.get("endpoint") or [""])[-1].strip()
     region = (query.get("region") or [""])[-1].strip()
     if endpoint:
         if urlsplit(endpoint).scheme != "https":
             raise ValueError("Deployment target endpoint must use HTTPS.")
-        command.extend(("--endpoint-url", endpoint))
+        extra.extend(("--endpoint-url", endpoint))
     if region:
-        command.extend(("--region", region))
-    return command
+        extra.extend(("--region", region))
+    return f"s3://{parsed.netloc}/{key}", extra
+
+
+def upload_command(*, config: Path, target_name: str, identity: Path) -> list[str]:
+    uri, extra = identity_object(config=config, target_name=target_name)
+    return [
+        "aws",
+        "s3",
+        "cp",
+        str(identity),
+        uri,
+        "--content-type",
+        "application/json",
+        "--cache-control",
+        "no-store, max-age=0",
+        *extra,
+    ]
 
 
 def build_parser() -> argparse.ArgumentParser:

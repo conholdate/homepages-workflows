@@ -6,12 +6,14 @@ on:
     paths:
       - ".github/workflows/**"
       - ".github/scripts/**"
+      - "tests/**"
   push:
     branches:
       - main
     paths:
       - ".github/workflows/**"
       - ".github/scripts/**"
+      - "tests/**"
 
 permissions:
   contents: read
@@ -66,12 +68,7 @@ jobs:
         shell: bash
         run: bash .github/scripts/test-metrics-refresh-production-boundary.sh
 
-      - name: Check refresh commit authorship and immutable migration refs
+      - name: Run all workflow tests
         shell: bash
-        run: |
-          python -m unittest discover -s tests -p test_refresh_commit_authorship.py
-          python -m unittest discover -s tests -p test_resolve_active_qa_ref.py
-
-      - name: Check exact-live production metrics publisher
-        shell: bash
-        run: python -m unittest discover -s tests -p test_production_metrics_refresh.py
+        # Every test file runs, so none can silently go stale again (D-067).
+        run: python -m unittest discover -s tests

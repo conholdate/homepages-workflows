@@ -271,7 +271,8 @@ class DeploymentIdentityTests(unittest.TestCase):
             data["sites"]["aspose.xyz"]["qa"]["cache"],
         )
         self.assertEqual(
-            {"kind": "cloudfront-deploy-account", "alias": "qa.groupdocs.app"},
+            # Migrated to Ceph by the verified action ceph_5a059efa3107b320 (#55).
+            {"kind": "bunny", "url": "https://qa.groupdocs.app/*"},
             data["sites"]["groupdocs.app"]["qa"]["cache"],
         )
         self.assertEqual(

@@ -49,6 +49,11 @@ on:
         required: false
         type: string
         default: ""
+      expected_live_sha:
+        description: Optional full source SHA the caller built on; the deploy refuses if live has changed (D-067)
+        required: false
+        type: string
+        default: ""
 
 permissions:
   actions: read
@@ -205,6 +210,7 @@ jobs:
           CACHE_KIND: ${{ steps.map.outputs.cache_kind }}
           CACHE_ALIAS: ${{ steps.map.outputs.cache_alias }}
           INVALIDATE_CACHE: ${{ inputs.invalidate_cache }}
+          EXPECTED_LIVE_SHA: ${{ inputs.expected_live_sha }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
           set -euo pipefail
@@ -244,6 +250,15 @@ jobs:
           fi
 
           IFS=',' read -ra target_array <<< "$TARGETS"
+          # D-067: inside this per-site queue, refuse to overwrite newer work.
+          if [ -n "${EXPECTED_LIVE_SHA}" ]; then
+            for target in "${target_array[@]}"; do
+              python ../workflow-support/.github/scripts/verify_expected_live_identity.py \
+                --config "${{ steps.map.outputs.config }}" \
+                --target "$target" \
+                --expected "$EXPECTED_LIVE_SHA"
+            done
+          fi
           for target in "${target_array[@]}"; do
             identity_path="public/.well-known/homepages-deployment.json"
             if [ "${{ inputs.reconcile_identity }}" = "true" ]; then
