@@ -210,6 +210,7 @@ jobs:
           REFRESHED_SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}
           REFRESH_BASE_SHA: ${{ steps.bake.outputs.before_sha }}
           GENERATED_PATHS: "data/metrics/{site}.json data/homepage_resource_feeds/{key}.json"
+          TRANSACTION_PREFIX: groupdocs-data
           GIT_AUTHOR_NAME: Homepages Agent
           GIT_AUTHOR_EMAIL: homepages.agent@conholdate.com
           GIT_COMMITTER_NAME: Homepages Agent

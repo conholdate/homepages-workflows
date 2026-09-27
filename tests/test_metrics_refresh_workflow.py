@@ -57,7 +57,8 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         production = self.workflow.split("name: Refresh production metrics from exact live sources", 1)[1]
         self.assertIn("run: bash workflows/.github/scripts/refresh-production-metrics.sh", production)
         condition = next(line for line in production.splitlines() if line.strip().startswith("if:"))
-        self.assertIn("always() && steps.refresh.outcome == 'success' &&", condition)
+        self.assertIn("!cancelled() && steps.refresh.outcome == 'success' &&", condition)
+        self.assertNotIn("always()", condition)
         self.assertIn("METRICS_SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}", self.workflow)
 
     def test_qa_sync_uses_the_shared_generated_data_publisher(self) -> None:

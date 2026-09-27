@@ -10,6 +10,7 @@
 #   GENERATED_PATHS       optional path templates ({site}, {key}); default metrics
 #   REFRESH_SOURCE_REF    optional branch that must keep pointing at
 #                         REFRESHED_SOURCE_SHA before and after the deploys
+#   TRANSACTION_PREFIX    optional deploy transaction prefix; default metrics-refresh
 set -euo pipefail
 
 read -r -a sites <<< "${QA_REFRESH_SITES:-}"
@@ -45,7 +46,8 @@ public_qa_source() {
   local identity
   identity="$(curl -fsS --compressed --max-time 20 \
     "https://qa.${site}/.well-known/homepages-deployment.json?metrics-refresh=${cache_key}" || true)"
-  if [ "$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null || true)" != "${site}" ] || \
+  if [ "$(jq -r '.repository // ""' <<<"${identity}" 2>/dev/null || true)" != "conholdate/homepages" ] || \
+    [ "$(jq -r '.site // ""' <<<"${identity}" 2>/dev/null || true)" != "${site}" ] || \
     [ "$(jq -r '.environment // ""' <<<"${identity}" 2>/dev/null || true)" != "qa" ]; then
     return 0
   fi
@@ -63,9 +65,16 @@ site_paths() {
   for template in "${path_templates[@]}"; do
     path="${template//\{site\}/${site}}"
     path="${path//\{key\}/${key}}"
-    if git -C "${homepages_repo}" cat-file -e "${REFRESHED_SOURCE_SHA}:${path}" 2>/dev/null; then
-      printf '%s\n' "${path}"
+    if ! git -C "${homepages_repo}" cat-file -e "${REFRESHED_SOURCE_SHA}:${path}" 2>/dev/null; then
+      continue
     fi
+    # Copy only what the refresh changed, so an untouched generated file never
+    # reverts newer work on the live QA version.
+    if [ -n "${REFRESH_BASE_SHA:-}" ] && \
+      git -C "${homepages_repo}" diff --quiet "${REFRESH_BASE_SHA}" "${REFRESHED_SOURCE_SHA}" -- "${path}"; then
+      continue
+    fi
+    printf '%s\n' "${path}"
   done
 }
 
@@ -118,8 +127,13 @@ for round in $(seq 1 "${max_rounds}"); do
       git checkout -q -B active-qa-generated-data-refresh "${current_qa_sha}"
       mapfile -t paths < <(site_paths "${site}")
       if [ "${#paths[@]}" -eq 0 ]; then
-        echo "::error::Refreshed source has no generated files for ${site}"
-        exit 1
+        if [ -z "${REFRESH_BASE_SHA:-}" ]; then
+          echo "::error::Refreshed source has no generated files for ${site}"
+          exit 1
+        fi
+        target_shas["${site}"]="${current_qa_sha}"
+        echo "No generated-data change for ${site}; active QA ${current_qa_sha} is kept."
+        continue
       fi
       for path in "${paths[@]}"; do
         git clean -fdq -- "${path}"
@@ -153,7 +167,7 @@ for round in $(seq 1 "${max_rounds}"); do
       continue
     fi
 
-    transaction_id="metrics-refresh-${GITHUB_RUN_ID}-qa-${site//./-}${suffix}"
+    transaction_id="${TRANSACTION_PREFIX:-metrics-refresh}-${GITHUB_RUN_ID}-qa-${site//./-}${suffix}"
     gh workflow run deploy-homepage.yml \
       --repo "${GITHUB_REPOSITORY}" \
       --ref main \
@@ -198,13 +212,20 @@ for round in $(seq 1 "${max_rounds}"); do
         exit 1
       fi
       if [ "${conclusion}" != "success" ]; then
+        # Retry only when another deploy won (live is a valid version that is neither
+        # our parent nor our own candidate) or our queued run was cancelled.
         live_now="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-conflict-${site//./-}${suffix}")"
-        if [ "${live_now}" != "${parent_shas[$site]}" ]; then
-          echo "::warning::QA ${site} changed during the deploy (round ${round}); rebuilding on the new live version ${live_now}."
+        if [ "${conclusion}" = "cancelled" ] || { [[ "${live_now}" =~ ^[0-9a-f]{40}$ ]] && \
+          [ "${live_now}" != "${parent_shas[$site]}" ] && [ "${live_now}" != "${target_sha}" ]; }; then
+          echo "::warning::QA ${site} changed during the deploy (round ${round}, ${conclusion}); rebuilding on the new live version ${live_now:-unknown}."
           conflicted["${site}"]=1
           continue
         fi
-        echo "::error::QA deploy run ${run_id} for ${site} completed as ${conclusion}"
+        if [ "${live_now}" = "${target_sha}" ]; then
+          echo "::error::QA ${site} now serves ${target_sha}, but deploy run ${run_id} completed as ${conclusion} (for example a failed cache purge); cached pages may be stale"
+        else
+          echo "::error::QA deploy run ${run_id} for ${site} completed as ${conclusion}"
+        fi
         exit 1
       fi
     fi

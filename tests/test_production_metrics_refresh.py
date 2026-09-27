@@ -83,14 +83,17 @@ elif args[:2] == ["workflow","run"]:
     # The deploy is only valid against the version the refresh built on (D-067).
     assert fields["expected_live_sha"] == state["sources"][site], (fields, state["sources"][site])
     prior=[r for r in state["runs"] if r["site"] == site]
-    conflict = state["mode"] == "conflict_always" or (state["mode"] == "conflict_once" and not prior)
+    mode=state["mode"]
+    conflict = mode == "conflict_always" or (mode == "conflict_once" and not prior)
+    cancelled = mode == "cancelled_once" and not prior
+    failed = mode in ("failed", "failed_after_publish")
     run={"id":len(state["runs"])+91,"display_title":"Deploy tx="+fields["transaction_id"],"created_at":"2026-09-13",
-         "conclusion":"failure" if conflict or state["mode"] == "failed" else "success", **fields}
+         "conclusion":"failure" if conflict or failed else ("cancelled" if cancelled else "success"), **fields}
     state["runs"].append(run)
     if conflict:
         # A user publish lands first; the queued refresh deploy then refuses.
         users=state["user_shas"]; state["sources"][site]=users[len(prior) % len(users)]
-    elif state["mode"] != "failed":
+    elif mode != "failed" and not cancelled:
         state["sources"][site]=fields["ref"]
     p.write_text(json.dumps(state))
 elif args[0] == "api":
@@ -139,6 +142,9 @@ else: raise SystemExit("Unexpected external boundary: "+repr(args))
                     parsed = subprocess.run([git_bin, "interpret-trailers", "--parse"], input=message,
                                             capture_output=True, text=True, check=True).stdout
                     self.assertEqual(3, parsed.count("Co-authored-by:"))
+            elif mode == "cancelled_once":
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                self.assertEqual(2, len(delivered["runs"]))
             elif mode == "conflict_once":
                 self.assertEqual(0, result.returncode, result.stdout + result.stderr)
                 first, retry = delivered["runs"]
@@ -178,6 +184,14 @@ else: raise SystemExit("Unexpected external boundary: "+repr(args))
         self.assertEqual(3, len(state["runs"]))
         self.assertIn("after 3 attempts", result.stdout + result.stderr)
         self.assertNotIn("Verified aspose.org production", result.stdout)
+
+    def test_failure_after_our_version_went_live_is_reported_not_retried(self):
+        state, result = self.run_refresh(mode="failed_after_publish", sites=("aspose.org",))
+        self.assertEqual(1, len(state["runs"]))
+        self.assertIn("cached pages may be stale", result.stdout + result.stderr)
+
+    def test_a_cancelled_queued_deploy_is_retried(self):
+        self.run_refresh(mode="cancelled_once", sites=("aspose.org",))
 
     def test_abbreviated_source_stops_before_any_dispatch(self):
         state, _ = self.run_refresh(source_override="abcdef0")

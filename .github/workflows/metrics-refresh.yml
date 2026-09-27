@@ -182,7 +182,7 @@ jobs:
 
       - name: Refresh production metrics from exact live sources
         id: production
-        if: ${{ always() && steps.refresh.outcome == 'success' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}
+        if: ${{ !cancelled() && steps.refresh.outcome == 'success' && ((github.event_name == 'workflow_dispatch' && inputs.deploy_production) || (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true')) }}
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}

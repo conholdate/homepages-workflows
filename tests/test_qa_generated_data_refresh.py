@@ -33,13 +33,17 @@ elif args[:2] == ["workflow","run"]:
     site=fields["site"]
     assert fields["expected_live_sha"] == state["sources"][site], (fields, state["sources"][site])
     prior=[r for r in state["runs"] if r["site"] == site]
-    conflict = state["mode"] == "conflict_always" or (state["mode"] == "conflict_once" and not prior)
+    mode=state["mode"]
+    conflict = mode == "conflict_always" or (mode == "conflict_once" and not prior)
+    cancelled = mode == "cancelled_once" and not prior
+    failed = mode in ("failed", "failed_after_publish")
+    conclusion = "failure" if conflict or failed else ("cancelled" if cancelled else "success")
     run={"id":len(state["runs"])+91,"display_title":"Deploy tx="+fields["transaction_id"],
-         "created_at":"2026-09-27","conclusion":"failure" if conflict else "success", **fields}
+         "created_at":"2026-09-27","conclusion":conclusion, **fields}
     state["runs"].append(run)
     if conflict:
         users=state["user_shas"]; state["sources"][site]=users[len(prior) % len(users)]
-    else:
+    elif mode != "failed" and not cancelled:
         state["sources"][site]=fields["ref"]
     p.write_text(json.dumps(state))
 elif args[0] == "api":
@@ -55,7 +59,7 @@ else:
 
 class QAGeneratedDataRefreshTests(unittest.TestCase):
     def run_refresh(self, *, mode="success", site="aspose.org", live="active",
-                    templates="", source_ref_ok=True):
+                    templates="", source_ref_ok=True, feed_untouched=False):
         bash = r"C:\Program Files\Git\bin\bash.exe" if os.name == "nt" else shutil.which("bash")
         self.assertTrue(bash and shutil.which("jq"), "Bash and real jq are required")
         with tempfile.TemporaryDirectory(prefix="qa-generated-data-proof-") as temp:
@@ -89,13 +93,16 @@ class QAGeneratedDataRefreshTests(unittest.TestCase):
             # The aggregate refresh: new metrics/feed plus a catalog change that
             # must never leak onto a different active QA version.
             write(f"data/metrics/{site}.json", '{"count":2}')
-            write(f"data/homepage_resource_feeds/{key}.json", '{"feed":2}')
+            if not feed_untouched:
+                write(f"data/homepage_resource_feeds/{key}.json", '{"feed":2}')
             write("data/products.json", '{"catalog":2}')
             git("commit", "-qam", "Refresh generated data")
             refreshed = git("rev-parse", "HEAD")
             # An agent QA change currently live on QA, and two newer user QA versions.
             git("checkout", "-q", "-b", "active", base)
             write("content/homepage.md", "ACTIVE QA CHANGE")
+            if feed_untouched:
+                write(f"data/homepage_resource_feeds/{key}.json", '{"feed":"NEWER ON QA"}')
             git("commit", "-qam", "Active QA change")
             active = git("rev-parse", "HEAD")
             user_shas = []
@@ -200,6 +207,36 @@ class QAGeneratedDataRefreshTests(unittest.TestCase):
         self.assertEqual(["data/metrics/aspose.org.json"], changed(user, retry["ref"]))
         self.assertEqual('{"count":2}', show(retry["ref"], "data/metrics/aspose.org.json"))
         self.assertEqual(retry["ref"], state["sources"]["aspose.org"])
+
+    def test_an_untouched_generated_file_never_reverts_newer_qa_work(self):
+        state, result, refs, show, changed = self.run_refresh(
+            site="groupdocs.com",
+            templates="data/metrics/{site}.json data/homepage_resource_feeds/{key}.json",
+            feed_untouched=True,
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        (run,) = state["runs"]
+        self.assertEqual(["data/metrics/groupdocs.com.json"], changed(refs["active"], run["ref"]))
+        self.assertEqual('{"feed":"NEWER ON QA"}', show(run["ref"], "data/homepage_resource_feeds/groupdocs_com.json"))
+
+    def test_failure_after_our_version_went_live_is_reported_not_retried(self):
+        state, result, *_ = self.run_refresh(mode="failed_after_publish")
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(1, len(state["runs"]))
+        self.assertIn("cached pages may be stale", result.stdout + result.stderr)
+        self.assertNotIn("Verified aspose.org QA", result.stdout)
+
+    def test_genuine_failure_with_live_unchanged_is_not_retried(self):
+        state, result, *_ = self.run_refresh(mode="failed")
+        self.assertNotEqual(0, result.returncode)
+        self.assertEqual(1, len(state["runs"]))
+        self.assertIn("completed as failure", result.stdout + result.stderr)
+
+    def test_a_cancelled_queued_deploy_is_retried(self):
+        state, result, *_ = self.run_refresh(mode="cancelled_once")
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(2, len(state["runs"]))
+        self.assertIn("-r2", state["runs"][1]["transaction_id"])
 
     def test_refresh_stops_loudly_after_three_conflicts(self):
         state, result, *_ = self.run_refresh(mode="conflict_always")

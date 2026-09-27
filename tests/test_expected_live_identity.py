@@ -20,8 +20,8 @@ EXPECTED_SPEC.loader.exec_module(EXPECTED_MODULE)
 
 
 class _Completed:
-    def __init__(self, returncode: int, stdout: str = "") -> None:
-        self.returncode, self.stdout = returncode, stdout
+    def __init__(self, returncode: int, stdout: str = "", stderr: str = "") -> None:
+        self.returncode, self.stdout, self.stderr = returncode, stdout, stderr
 
 
 class ExpectedLiveIdentityTests(unittest.TestCase):
@@ -63,6 +63,16 @@ class ExpectedLiveIdentityTests(unittest.TestCase):
             with self.subTest(live=live.stdout):
                 code, _ = self._run(live=live)
                 self.assertEqual(EXPECTED_MODULE.LIVE_CHANGED, code)
+
+    def test_a_failed_storage_read_is_named_not_reported_as_missing(self) -> None:
+        from contextlib import redirect_stdout
+        from io import StringIO
+
+        output = StringIO()
+        with redirect_stdout(output):
+            code, _ = self._run(live=_Completed(1, "", "An error occurred (AccessDenied) when calling GetObject"))
+        self.assertEqual(EXPECTED_MODULE.LIVE_CHANGED, code)
+        self.assertIn("storage read failed (An error occurred (AccessDenied)", output.getvalue())
 
     def test_expected_version_must_be_a_full_sha(self) -> None:
         code, calls = self._run(live=_Completed(0, "{}"), expected="abc123")

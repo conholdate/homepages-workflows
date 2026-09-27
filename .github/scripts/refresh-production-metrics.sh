@@ -157,14 +157,20 @@ for round in $(seq 1 "${max_rounds}"); do
         exit 1
       fi
       if [ "${conclusion}" != "success" ]; then
-        # D-067: a refused deploy because live changed is a conflict, not a failure.
-        live_now="$(public_production_source "${site}" "${GITHUB_RUN_ID}-conflict-${site//./-}${suffix}")"
-        if [ "${live_now}" != "${parent_shas[$site]}" ]; then
-          echo "::warning::Production ${site} changed during the metrics deploy (round ${round}); rebuilding on the new live version ${live_now}."
+        # D-067: retry only when another deploy won (live is a valid version that is
+        # neither our parent nor our own candidate) or our queued run was cancelled.
+        live_now="$(public_production_source "${site}" "${GITHUB_RUN_ID}-conflict-${site//./-}${suffix}" || true)"
+        if [ "${conclusion}" = "cancelled" ] || { [[ "${live_now}" =~ ^[0-9a-f]{40}$ ]] && \
+          [ "${live_now}" != "${parent_shas[$site]}" ] && [ "${live_now}" != "${target_sha}" ]; }; then
+          echo "::warning::Production ${site} changed during the metrics deploy (round ${round}, ${conclusion}); rebuilding on the new live version ${live_now:-unknown}."
           conflicted["${site}"]=1
           continue
         fi
-        echo "::error::Production deploy run ${run_id} for ${site} completed as ${conclusion}"
+        if [ "${live_now}" = "${target_sha}" ]; then
+          echo "::error::Production ${site} now serves ${target_sha}, but deploy run ${run_id} completed as ${conclusion} (for example a failed cache purge); cached pages may be stale"
+        else
+          echo "::error::Production deploy run ${run_id} for ${site} completed as ${conclusion}"
+        fi
         exit 1
       fi
     fi
