@@ -40,8 +40,8 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn('if not item.get("ok")', self.workflow)
         self.assertIn("Their last verified files are preserved", self.workflow)
         self.assertIn('metrics-validate --site "${site}" --write', self.workflow)
-        self.assertIn('refreshed_sites="${{ steps.refresh.outputs.qa_sites }}"', self.workflow)
-        self.assertIn('refreshed_sites="${{ steps.refresh.outputs.main_sites }}"', self.workflow)
+        self.assertIn("QA_REFRESH_SITES: ${{ steps.refresh.outputs.qa_sites }}", self.workflow)
+        self.assertIn("METRICS_REFRESH_SITES: ${{ steps.refresh.outputs.qa_sites }}", self.workflow)
 
     def test_commit_scope_is_limited_to_catalog_and_baked_metrics(self) -> None:
         self.assertIn("git add data/products.json data/metrics/*.json", self.workflow)
@@ -53,75 +53,59 @@ class MetricsRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("git diff --name-only", guard)
         self.assertIn("git ls-files --others --exclude-standard", guard)
 
-    def test_production_uses_and_verifies_exact_main_sha(self) -> None:
-        self.assertIn("SOURCE_SHA: ${{ steps.refresh.outputs.main_sha }}", self.workflow)
-        self.assertIn('-f "ref=${SOURCE_SHA}"', self.workflow)
-        self.assertIn("actions/runs/${run_id}", self.workflow)
-        self.assertIn(".well-known/homepages-deployment.json", self.workflow)
-        self.assertIn('remote_main_after="$(remote_main_sha)"', self.workflow)
+    def test_production_uses_shared_exact_live_publisher_even_if_qa_sync_fails(self) -> None:
+        production = self.workflow.split("name: Refresh production metrics from exact live sources", 1)[1]
+        self.assertIn("run: bash workflows/.github/scripts/refresh-production-metrics.sh", production)
+        condition = next(line for line in production.splitlines() if line.strip().startswith("if:"))
+        self.assertIn("always() && steps.refresh.outcome == 'success' &&", condition)
+        self.assertIn("METRICS_SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}", self.workflow)
 
-    def test_qa_is_synchronized_to_exact_qa_sha_even_when_metrics_are_unchanged(self) -> None:
+    def test_qa_sync_uses_the_shared_generated_data_publisher(self) -> None:
         qa_step = self.workflow.index("name: Synchronize QA homepage deployments")
-        production_step = self.workflow.index("name: Dispatch production homepage deploys")
+        production_step = self.workflow.index("name: Refresh production metrics from exact live sources")
         self.assertLess(qa_step, production_step)
-        self.assertIn("name: Synchronize QA homepage deployments", self.workflow)
-        self.assertIn("always() && steps.refresh.outcome == 'success'", self.workflow)
-        self.assertIn("SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}", self.workflow)
-        self.assertIn('remote_qa="$(remote_qa_sha)"', self.workflow)
-        self.assertIn('-f "site=${site}"', self.workflow)
-        self.assertIn('-f "environment=qa"', self.workflow)
-        self.assertIn('-f "ref=${SOURCE_SHA}"', self.workflow)
-        self.assertIn("actions/runs/${run_id}", self.workflow)
-        self.assertIn("https://qa.${site}/.well-known/homepages-deployment.json", self.workflow)
-        self.assertIn("public_qa_has_noindex", self.workflow)
-        self.assertIn("missing robots noindex", self.workflow)
-        self.assertIn('remote_qa_after="$(remote_qa_sha)"', self.workflow)
+        qa = self.workflow[qa_step:production_step]
+        self.assertIn("always() && steps.refresh.outcome == 'success'", qa)
+        self.assertIn("REFRESHED_SOURCE_SHA: ${{ steps.refresh.outputs.qa_sha }}", qa)
+        self.assertIn("REFRESH_BASE_SHA: ${{ steps.refresh.outputs.qa_before_sha }}", qa)
+        self.assertIn("REFRESH_SOURCE_REF: qa-homepages-v1", qa)
+        self.assertIn("run: bash workflows/.github/scripts/refresh-qa-generated-data.sh", qa)
 
     def test_active_qa_sources_receive_site_local_metrics_without_aggregate_fallback(self) -> None:
-        self.assertIn(
-            '"${GITHUB_WORKSPACE}/workflows/.github/scripts/resolve_active_qa_ref.py"',
-            self.workflow,
-        )
+        shared = (ROOT / ".github" / "scripts" / "refresh-qa-generated-data.sh").read_text(encoding="utf-8")
+        self.assertIn('"${workflows_repo}/.github/scripts/resolve_active_qa_ref.py"', shared)
         self.assertIn("path: workflows", self.workflow)
-        self.assertNotIn("--optional", self.workflow)
-        self.assertIn('--recovery-ref "${recovery_ref}"', self.workflow)
-        self.assertIn('BEFORE_AGGREGATE_SHA: ${{ steps.refresh.outputs.qa_before_sha }}', self.workflow)
-        self.assertIn('if [ "${current_qa_sha}" = "${BEFORE_AGGREGATE_SHA}" ]', self.workflow)
-        self.assertIn('git checkout "${SOURCE_SHA}" -- "data/metrics/${site}.json"', self.workflow)
+        self.assertNotIn("--optional", shared)
+        self.assertIn('--recovery-ref "${recovery_ref}"', shared)
+        self.assertIn('[ "${current_qa_sha}" = "${REFRESH_BASE_SHA}" ]', shared)
+        self.assertIn("default_paths='data/metrics/{site}.json'", shared)
         self.assertEqual(
             self.workflow.count("metrics-bake --site all --apply --skip-source-label-sync --write"),
             1,
         )
-        self.assertIn('target_shas["${site}"]="${candidate_sha}"', self.workflow)
-        self.assertIn('-f "ref=${target_sha}"', self.workflow)
 
     def test_exact_parent_is_rechecked_before_each_qa_dispatch(self) -> None:
-        self.assertIn(
-            'latest_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-pre-dispatch-${site//./-}")"',
-            self.workflow,
-        )
-        self.assertIn('if [ "${latest_qa_sha}" != "${current_qa_sha}" ]', self.workflow)
-        self.assertIn("Public QA changed before metrics deployment", self.workflow)
-        self.assertIn('push --force-with-lease="${lease}"', self.workflow)
+        shared = (ROOT / ".github" / "scripts" / "refresh-qa-generated-data.sh").read_text(encoding="utf-8")
+        self.assertIn('latest_qa_sha="$(public_qa_source "${site}" "${GITHUB_RUN_ID}-pre-dispatch-', shared)
+        self.assertIn('if [ "${latest_qa_sha}" != "${current_qa_sha}" ]', shared)
+        self.assertIn("Public QA changed before deploy", shared)
+        self.assertIn("push -q --force-with-lease=", shared)
+        self.assertIn('-f "expected_live_sha=${current_qa_sha}"', shared)
 
     def test_exact_parent_commit_has_repository_local_identity(self) -> None:
         qa_step = self.workflow.index("name: Synchronize QA homepage deployments")
-        production_step = self.workflow.index("name: Dispatch production homepage deploys")
+        production_step = self.workflow.index("name: Refresh production metrics from exact live sources")
         self.assertIn("GIT_AUTHOR_NAME: Homepages Agent", self.workflow[qa_step:production_step])
         self.assertIn(
             "GIT_COMMITTER_EMAIL: homepages.agent@conholdate.com",
             self.workflow[qa_step:production_step],
         )
 
-    def test_manual_qa_only_refresh_does_not_mutate_main(self) -> None:
-        self.assertIn(
-            "REFRESH_MAIN: ${{ (github.event_name == 'schedule' && vars.METRICS_REFRESH_PRODUCTION_DEPLOY_ENABLED == 'true') || (github.event_name == 'workflow_dispatch' && inputs.deploy_production) }}",
-            self.workflow,
-        )
-        self.assertIn('if [ "${REFRESH_MAIN}" = "true" ]; then', self.workflow)
-        self.assertIn("Manual QA-only refresh left homepages main unchanged", self.workflow)
-        self.assertIn("printf 'main_changed=false\\n'", self.workflow)
-        self.assertIn("ls-remote https://github.com/conholdate/homepages.git refs/heads/main", self.workflow)
+    def test_workflow_never_mutates_homepages_main(self) -> None:
+        # Production is refreshed on each site's exact live source, never via main.
+        self.assertNotIn("refs/heads/main", self.workflow)
+        self.assertNotIn("HEAD:main", self.workflow)
+        self.assertIn('refresh_branch "${HOMEPAGES_QA_SOURCE_REF}"', self.workflow)
 
 
 if __name__ == "__main__":

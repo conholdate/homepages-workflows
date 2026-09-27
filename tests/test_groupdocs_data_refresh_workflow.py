@@ -2,7 +2,8 @@ from pathlib import Path
 import unittest
 
 
-WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "groupdocs-data-refresh.yml"
+ROOT = Path(__file__).resolve().parents[1]
+WORKFLOW = ROOT / ".github" / "workflows" / "groupdocs-data-refresh.yml"
 
 
 class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
@@ -32,7 +33,11 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertIn('metric_path="data/metrics/${SITE}.json"', self.workflow)
         self.assertIn('feed_path="data/homepage_resource_feeds/${key}.json"', self.workflow)
         self.assertIn('"${metric_path}"|"${feed_path}")', self.workflow)
-        self.assertIn('-f "environment=qa"', self.workflow)
+        self.assertIn("run: bash workflows/.github/scripts/refresh-qa-generated-data.sh", self.workflow)
+        self.assertIn(
+            'GENERATED_PATHS: "data/metrics/{site}.json data/homepage_resource_feeds/{key}.json"',
+            self.workflow,
+        )
         self.assertIn("github.event_name == 'schedule' || inputs.deploy_production", self.workflow)
         self.assertIn("default: false", self.workflow)
         self.assertIn("METRICS_SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}", self.workflow)
@@ -48,14 +53,17 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         self.assertIn("Baking generated data directly on exact active QA source", self.workflow)
         self.assertIn('git checkout -B active-qa-data-refresh "origin/${target_branch}"', self.workflow)
         self.assertIn('push --force-with-lease="${target_ref}:${before_sha}"', self.workflow)
-        self.assertIn('-f "ref=${SOURCE_SHA}"', self.workflow)
+        self.assertIn("REFRESHED_SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}", self.workflow)
+        self.assertIn("REFRESH_BASE_SHA: ${{ steps.bake.outputs.before_sha }}", self.workflow)
         self.assertNotIn("Preserving active QA candidate", self.workflow)
 
     def test_active_candidate_refresh_rejects_parent_and_path_drift(self) -> None:
         self.assertIn("Public QA identity names unexpected repository", self.workflow)
         self.assertIn("Selected QA data target does not match public QA", self.workflow)
         self.assertIn("Refresh changed an unapproved path", self.workflow)
-        self.assertIn("Public QA changed before refreshed deployment", self.workflow)
+        shared = (ROOT / ".github" / "scripts" / "refresh-qa-generated-data.sh").read_text(encoding="utf-8")
+        self.assertIn("Public QA changed before deploy", shared)
+        self.assertIn('-f "expected_live_sha=${current_qa_sha}"', shared)
 
     def test_candidate_lookup_reads_all_remote_heads(self) -> None:
         self.assertIn("ls-remote --heads https://github.com/conholdate/homepages.git", self.workflow)

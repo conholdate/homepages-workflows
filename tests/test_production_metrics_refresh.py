@@ -51,8 +51,18 @@ class ProductionMetricsRefreshTests(unittest.TestCase):
             theme.write_text("UNAPPROVED QA STYLE\n", encoding="utf-8")
             git("add", "."); git("commit", "-qm", "Different QA source")
             qa = git("rev-parse", "HEAD")
+            # Two newer production versions a user could publish mid-refresh (D-067).
+            user_shas = []
+            git("checkout", "-q", "-b", "user-publish", live)
+            for index in (1, 2):
+                content.write_text(f"USER PUBLISHED COPY {index}\n", encoding="utf-8")
+                git("commit", "-qam", f"User publish {index}")
+                user_shas.append(git("rev-parse", "HEAD"))
+            git("push", "-q", str(remote), "user-publish")
+            git("checkout", "-q", "-")
             state = root / "state.json"
-            state.write_text(json.dumps({"sources": {s: live for s in fixture_sites}, "runs": [], "mode": mode}), encoding="utf-8")
+            state.write_text(json.dumps({"sources": {s: live for s in fixture_sites}, "runs": [], "mode": mode,
+                                         "user_shas": user_shas}), encoding="utf-8")
             fake = '''#!/usr/bin/env python
 import json, os, subprocess, sys
 from pathlib import Path
@@ -69,13 +79,25 @@ if kind == "curl":
 elif args[:2] == ["workflow","run"]:
     fields=dict(a.split("=",1) for n,a in enumerate(args) if n and args[n-1] == "-f")
     assert fields["environment"] == "production" and len(fields["ref"]) == 40
-    run={"id":len(state["runs"])+91,"display_title":"Deploy tx="+fields["transaction_id"],"created_at":"2026-09-13", **fields}
+    site=fields["site"]
+    # The deploy is only valid against the version the refresh built on (D-067).
+    assert fields["expected_live_sha"] == state["sources"][site], (fields, state["sources"][site])
+    prior=[r for r in state["runs"] if r["site"] == site]
+    conflict = state["mode"] == "conflict_always" or (state["mode"] == "conflict_once" and not prior)
+    run={"id":len(state["runs"])+91,"display_title":"Deploy tx="+fields["transaction_id"],"created_at":"2026-09-13",
+         "conclusion":"failure" if conflict or state["mode"] == "failed" else "success", **fields}
     state["runs"].append(run)
-    if state["mode"] != "failed": state["sources"][fields["site"]]=fields["ref"]
+    if conflict:
+        # A user publish lands first; the queued refresh deploy then refuses.
+        users=state["user_shas"]; state["sources"][site]=users[len(prior) % len(users)]
+    elif state["mode"] != "failed":
+        state["sources"][site]=fields["ref"]
     p.write_text(json.dumps(state))
 elif args[0] == "api":
     if "actions/workflows/" in args[1]: print(json.dumps({"workflow_runs":state["runs"]}))
-    else: print(json.dumps({"status":"completed", "conclusion":"failure" if state["mode"] == "failed" else "success"}))
+    else:
+        run=[r for r in state["runs"] if args[1].endswith("/" + str(r["id"]))][0]
+        print(json.dumps({"status":"completed", "conclusion":run["conclusion"]}))
 else: raise SystemExit("Unexpected external boundary: "+repr(args))
 '''
             for name in ("curl", "gh"):
@@ -117,6 +139,19 @@ else: raise SystemExit("Unexpected external boundary: "+repr(args))
                     parsed = subprocess.run([git_bin, "interpret-trailers", "--parse"], input=message,
                                             capture_output=True, text=True, check=True).stdout
                     self.assertEqual(3, parsed.count("Co-authored-by:"))
+            elif mode == "conflict_once":
+                self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                first, retry = delivered["runs"]
+                user = delivered["user_shas"][0]
+                self.assertEqual(live, first["expected_live_sha"])
+                self.assertEqual(user, retry["expected_live_sha"])
+                self.assertIn("-r2", retry["transaction_id"])
+                # Rebuilt on the user's newer version: their work survives, metrics refresh.
+                self.assertEqual(user, git("rev-parse", retry["ref"] + "^"))
+                self.assertEqual("USER PUBLISHED COPY 1", git("show", retry["ref"] + ":content/homepage.md"))
+                self.assertEqual(f"data/metrics/{sites[0]}.json", git("diff", "--name-only", user, retry["ref"]))
+                self.assertEqual('{"count":2}', git("show", retry["ref"] + f":data/metrics/{sites[0]}.json"))
+                self.assertEqual(retry["ref"], delivered["sources"][sites[0]])
             else:
                 self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
             return delivered, result
@@ -134,6 +169,15 @@ else: raise SystemExit("Unexpected external boundary: "+repr(args))
     def test_failed_deployment_is_not_reported_as_verified(self):
         _, result = self.run_refresh(mode="failed", sites=("groupdocs.com",))
         self.assertNotIn("Verified groupdocs.com production", result.stdout)
+
+    def test_refresh_retries_on_a_newer_live_version_without_overwriting_it(self):
+        self.run_refresh(mode="conflict_once", sites=("aspose.org",))
+
+    def test_refresh_stops_loudly_after_three_conflicts(self):
+        state, result = self.run_refresh(mode="conflict_always", sites=("aspose.org",))
+        self.assertEqual(3, len(state["runs"]))
+        self.assertIn("after 3 attempts", result.stdout + result.stderr)
+        self.assertNotIn("Verified aspose.org production", result.stdout)
 
     def test_abbreviated_source_stops_before_any_dispatch(self):
         state, _ = self.run_refresh(source_override="abcdef0")
