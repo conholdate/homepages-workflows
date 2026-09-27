@@ -51,8 +51,11 @@ class GroupDocsDataRefreshWorkflowTests(unittest.TestCase):
         )
         self.assertIn("path: workflows", self.workflow)
         self.assertIn("Baking generated data directly on exact active QA source", self.workflow)
-        self.assertIn('git checkout -B active-qa-data-refresh "origin/${target_branch}"', self.workflow)
-        self.assertIn('push --force-with-lease="${target_ref}:${before_sha}"', self.workflow)
+        self.assertIn('git checkout -B active-qa-data-refresh "${current_sha}"', self.workflow)
+        self.assertIn('push --force-with-lease="${target_ref}:${target_remote_sha}"', self.workflow)
+        # D-068: frozen migration refs are never written; the site's own branch is the fallback.
+        self.assertIn('recovery_ref="refs/heads/homepages-agent/qa-refresh/${SITE}"', self.workflow)
+        self.assertIn('--recovery-ref "${recovery_ref}"', self.workflow)
         self.assertIn("REFRESHED_SOURCE_SHA: ${{ steps.bake.outputs.source_sha }}", self.workflow)
         self.assertIn("REFRESH_BASE_SHA: ${{ steps.bake.outputs.before_sha }}", self.workflow)
         self.assertNotIn("Preserving active QA candidate", self.workflow)
