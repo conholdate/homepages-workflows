@@ -19,6 +19,9 @@ def _registered_sites(registry_path: Path) -> set[str]:
         str(site)
         for site, config in sites.items()
         if isinstance(config, dict)
+        # A site the agent does not deploy yet is baked by owner requests only
+        # (homepages-agent D-090); the scheduled refresh does not own it.
+        and config.get("scheduled_refresh", True) is not False
         and isinstance(config.get("metrics"), dict)
         and any(
             isinstance(metric, dict) and metric.get("enabled") is True
