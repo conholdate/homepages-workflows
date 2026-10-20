@@ -43,6 +43,19 @@ class MetricsRegistryCoverageTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("Metrics schedule coverage OK: example.com", result.stdout)
 
+    def test_site_left_out_of_the_schedule_needs_no_owner(self) -> None:
+        # conholdate.com (S3, no public deployment identity) is baked by owner
+        # requests only; the scheduled refresh must not fail for it.
+        result = self._run(
+            "sites:\n"
+            "  example.com:\n    metrics:\n      total:\n        enabled: true\n"
+            "  conholdate.com:\n    scheduled_refresh: false\n    metrics:\n      total:\n        enabled: true\n",
+            "jobs:\n  refresh:\n    env:\n      HOMEPAGES_METRICS_COVERED_SITES: example.com\n",
+        )
+
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Metrics schedule coverage OK: example.com", result.stdout)
+
     def test_rejects_registered_site_without_schedule_coverage(self) -> None:
         result = self._run(
             "sites:\n  missing.example:\n    metrics:\n      total:\n        enabled: true\n",
