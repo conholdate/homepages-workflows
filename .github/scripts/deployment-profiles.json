@@ -159,9 +159,14 @@
         }
       },
       "production": {
-        "credential_set": "sl",
-        "targets": ["Production"],
-        "cache": {"kind": "cloudfront-deploy-account", "alias": "www.groupdocs.cloud"}
+        "credential_set": "ceph_production",
+        "targets": [
+          "production_ceph"
+        ],
+        "cache": {
+          "kind": "bunny",
+          "url": "https://www.groupdocs.cloud/*"
+        }
       }
     },
     "groupdocs.app": {
