@@ -226,6 +226,16 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn('CACHE_KIND: ${{ steps.map.outputs.cache_kind }}', workflow)
         self.assertIn('[ "$CACHE_KIND" = "cloudfront-deploy-account" ]', workflow)
 
+    def test_build_starts_from_an_empty_output_folder(self) -> None:
+        # D-105: a Koinize build committed under public/ went live with every
+        # site because the build wrote into it and the deploy uploaded it all.
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+        build = workflow.split("- name: Build", 1)[1].split("- name:", 1)[0]
+        self.assertIn("rm -rf public", build)
+        self.assertLess(build.index("rm -rf public"), build.index("hugo --config"))
+
     def test_deploy_workflow_uses_resolved_site_hugo_version(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"

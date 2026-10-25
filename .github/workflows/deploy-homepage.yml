@@ -143,7 +143,12 @@ jobs:
 
       - name: Build
         if: ${{ !inputs.reconcile_identity }}
-        run: hugo --config "${{ steps.map.outputs.config }}" --minify
+        # Every build starts from an empty output folder: the deploy uploads all
+        # of public/, so a leftover file would go live (D-105).
+        run: |
+          set -euo pipefail
+          rm -rf public
+          hugo --config "${{ steps.map.outputs.config }}" --minify
 
       - name: Write deployment identity
         if: ${{ !inputs.reconcile_identity }}
