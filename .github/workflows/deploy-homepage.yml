@@ -334,7 +334,10 @@ jobs:
             echo "::error::Missing Bunny purge URL mapping."
             exit 1
           fi
-          curl -fsS -G \
+          # The purge service answers 429 when it is busy (four deploys marked
+          # failed on 2026-10-25/26 after their files were already live); curl
+          # retries 429 and 5xx answers, waiting between attempts.
+          curl -fsS -G --retry 6 --retry-delay 20 --retry-max-time 300 \
             -H "X-Api-Key: ${BUNNY_API_KEY}" \
             --data-urlencode "url=${CACHE_URL}" \
             "https://api.dynabic.com/bn/purge?async=true" >/dev/null

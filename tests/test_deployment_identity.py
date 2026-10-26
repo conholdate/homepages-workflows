@@ -236,6 +236,17 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn("rm -rf public", build)
         self.assertLess(build.index("rm -rf public"), build.index("hugo --config"))
 
+    def test_bunny_purge_retries_a_busy_purge_service(self) -> None:
+        # 2026-10-25/26: the purge service answered 429 and four deploys whose
+        # files were already live were marked failed.
+        workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
+            encoding="utf-8"
+        )
+        purge = workflow.split("- name: Purge BunnyCDN", 1)[1].split("- name:", 1)[0]
+        self.assertIn("--retry 6", purge)
+        self.assertIn("--retry-delay 20", purge)
+        self.assertIn("--retry-max-time 300", purge)
+
     def test_deploy_workflow_uses_resolved_site_hugo_version(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
