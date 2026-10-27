@@ -283,23 +283,23 @@ class DeploymentIdentityTests(unittest.TestCase):
         )
         for site in data["sites"].values():
             self.assertEqual({"qa", "production"}, set(site))
-        self.assertEqual(
-            {"kind": "bunny", "url": "https://www.aspose.org/*"},
-            data["sites"]["aspose.org"]["production"]["cache"],
-        )
-        self.assertEqual(
-            {"kind": "bunny", "url": "https://qa.aspose.xyz/*"},
-            data["sites"]["aspose.xyz"]["qa"]["cache"],
-        )
-        self.assertEqual(
-            # Migrated to Ceph by the verified action ceph_5a059efa3107b320 (#55).
-            {"kind": "bunny", "url": "https://qa.groupdocs.app/*"},
-            data["sites"]["groupdocs.app"]["qa"]["cache"],
-        )
-        self.assertEqual(
-            {"kind": "none"},
-            data["sites"]["conholdate.cloud"]["production"]["cache"],
-        )
+        # A Ceph migration moves sites onto Ceph over time, so the contract is a
+        # rule every Ceph profile keeps, not a pinned list of each site's storage.
+        for name, site in data["sites"].items():
+            for environment, profile in site.items():
+                if not any(target.endswith("_ceph") for target in profile["targets"]):
+                    continue
+                host = ("qa." if environment == "qa" else "www.") + name
+                with self.subTest(site=name, environment=environment):
+                    self.assertEqual(
+                        ["staging_ceph" if environment == "qa" else "production_ceph"],
+                        profile["targets"],
+                    )
+                    self.assertEqual(
+                        "ceph_qa" if environment == "qa" else "ceph_production",
+                        profile["credential_set"],
+                    )
+                    self.assertEqual({"kind": "bunny", "url": f"https://{host}/*"}, profile["cache"])
 
     def test_deployment_profile_resolves_manifest_config_and_profile_targets(self) -> None:
         manifest = """sites:
