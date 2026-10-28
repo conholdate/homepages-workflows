@@ -334,10 +334,25 @@ jobs:
             echo "::error::Missing Bunny purge URL mapping."
             exit 1
           fi
-          # The purge service answers 429 when it is busy (four deploys marked
-          # failed on 2026-10-25/26 after their files were already live); curl
-          # retries 429 and 5xx answers, waiting between attempts.
-          curl -fsS -G --retry 6 --retry-delay 20 --retry-max-time 300 \
-            -H "X-Api-Key: ${BUNNY_API_KEY}" \
-            --data-urlencode "url=${CACHE_URL}" \
-            "https://api.dynabic.com/bn/purge?async=true" >/dev/null
+          # The purge service answers 429 when it is busy. curl's own --retry
+          # follows the service's short Retry-After, so on 2026-10-28 three of
+          # ten parallel publish deploys used all their retries within 12
+          # seconds and failed after their files were live. Wait here instead:
+          # longer each time, with a random spread so parallel deploys part.
+          attempts=6
+          for attempt in $(seq 1 "$attempts"); do
+            code=$(curl -sS --connect-timeout 10 --max-time 60 -o /dev/null -w '%{http_code}' -G \
+              -H "X-Api-Key: ${BUNNY_API_KEY}" \
+              --data-urlencode "url=${CACHE_URL}" \
+              "https://api.dynabic.com/bn/purge?async=true") || true
+            case "$code" in
+              2??) echo "Bunny purge accepted on attempt ${attempt}."; exit 0 ;;
+              429|5??|000) echo "Bunny purge busy (HTTP ${code}) on attempt ${attempt} of ${attempts}." ;;
+              *) echo "::error::Bunny purge answered HTTP ${code}."; exit 1 ;;
+            esac
+            if [ "$attempt" -lt "$attempts" ]; then
+              sleep $(( attempt * 15 + RANDOM % 15 ))
+            fi
+          done
+          echo "::error::Bunny purge was still busy after ${attempts} attempts."
+          exit 1

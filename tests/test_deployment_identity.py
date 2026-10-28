@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 
 
@@ -236,16 +239,70 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn("rm -rf public", build)
         self.assertLess(build.index("rm -rf public"), build.index("hugo --config"))
 
-    def test_bunny_purge_retries_a_busy_purge_service(self) -> None:
-        # 2026-10-25/26: the purge service answered 429 and four deploys whose
-        # files were already live were marked failed.
+    def _run_purge(self, answers: list[str]) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
+        """Run the workflow's real purge script against a fake curl and sleep."""
+
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
             encoding="utf-8"
         )
         purge = workflow.split("- name: Purge BunnyCDN", 1)[1].split("- name:", 1)[0]
-        self.assertIn("--retry 6", purge)
-        self.assertIn("--retry-delay 20", purge)
-        self.assertIn("--retry-max-time 300", purge)
+        script = textwrap.dedent(purge.split("run: |\n", 1)[1])
+        with tempfile.TemporaryDirectory() as tmp:
+            bin_dir = Path(tmp)
+            (bin_dir / "answers").write_text("\n".join(answers) + "\n", encoding="utf-8")
+            (bin_dir / "curl").write_text(
+                "#!/usr/bin/env bash\n"
+                'echo call >> "$FAKE/calls"\n'
+                'answer=$(sed -n "$(wc -l < "$FAKE/calls")p" "$FAKE/answers")\n'
+                'printf %s "$answer"\n',
+                encoding="utf-8",
+            )
+            (bin_dir / "sleep").write_text(
+                '#!/usr/bin/env bash\necho "$1" >> "$FAKE/sleeps"\n', encoding="utf-8"
+            )
+            for name in ("curl", "sleep"):
+                (bin_dir / name).chmod(0o755)
+            result = subprocess.run(
+                ["bash", "-c", script],
+                env={
+                    **os.environ,
+                    "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
+                    "FAKE": str(bin_dir),
+                    "BUNNY_API_KEY": "test-key",
+                    "CACHE_URL": "https://www.example.com/*",
+                },
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            calls = (bin_dir / "calls").read_text(encoding="utf-8").split()
+            sleeps_file = bin_dir / "sleeps"
+            sleeps = sleeps_file.read_text(encoding="utf-8").split() if sleeps_file.exists() else []
+        return result, calls, sleeps
+
+    def test_bunny_purge_waits_out_a_busy_purge_service(self) -> None:
+        # 2026-10-28 (WordPress comment 225): curl's --retry followed the
+        # service's short Retry-After and gave up within 12 seconds, failing
+        # three of ten parallel publish deploys after their files were live.
+        result, calls, sleeps = self._run_purge(["429", "429", "503", "200"])
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(4, len(calls))
+        self.assertEqual(3, len(sleeps))
+        for attempt, seconds in enumerate(sleeps, start=1):
+            self.assertGreaterEqual(int(seconds), attempt * 15)
+            self.assertLess(int(seconds), attempt * 15 + 15)
+        self.assertIn("accepted on attempt 4", result.stdout)
+
+    def test_bunny_purge_fails_after_its_attempts_or_on_a_refusal(self) -> None:
+        busy, calls, sleeps = self._run_purge(["429"] * 6)
+        self.assertEqual(1, busy.returncode)
+        self.assertEqual(6, len(calls))
+        self.assertEqual(5, len(sleeps))
+        self.assertIn("still busy after 6 attempts", busy.stdout)
+        refused, calls, _sleeps = self._run_purge(["401"])
+        self.assertEqual(1, refused.returncode)
+        self.assertEqual(1, len(calls))
+        self.assertIn("answered HTTP 401", refused.stdout)
 
     def test_deploy_workflow_uses_resolved_site_hugo_version(self) -> None:
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
