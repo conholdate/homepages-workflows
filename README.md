@@ -39,7 +39,6 @@ transaction_id: <empty>
 | `guarded-pr-autopilot.yml` | Reusable call | Shared implementation used by both PR wrappers. |
 | `metrics-refresh.yml` | Schedule/manual | Refresh bounded Aspose metrics on QA and rebuild production from each site's exact live source. |
 | `groupdocs-data-refresh.yml` | Schedule/manual | Refresh one GroupDocs site's active QA data and rebuild production with metrics only from its exact live source. |
-| `homepages-agent-heartbeat.yml` | Every hour at `:07` and `:37` UTC/manual | Produce Aspose coordination, validation, readiness, and metric evidence. |
 | `homepages-agent-menu-health.yml` | Daily at `03:17` UTC/manual | Refresh and commit Agent menu-health reports. |
 | `workflow-lint.yml` | Workflow/script PR or main push/manual | Run `actionlint`, `shellcheck`, and the deployment concurrency contract test. |
 
@@ -255,12 +254,9 @@ whether the exact head is reviewable or mergeable.
 
 ## Operational Health
 
-### Heartbeat
-
-`homepages-agent-heartbeat.yml` runs at `:07` and `:37` each hour. It checks the
-configured QA source, runs all-Aspose staging validation/readiness/metrics
-evidence, and uploads the reports. Individual evidence commands continue far
-enough to produce a useful combined summary when one check fails.
+The Agent's recurring cycle on its VM raises failure alerts (a failing
+scheduled job, repeated deploy failures, a QA that cannot be published); the
+former `homepages-agent-heartbeat.yml` was retired on 2026-10-28.
 
 ### Menu Health
 
@@ -268,7 +264,7 @@ enough to produce a useful combined summary when one check fails.
 managed Aspose menus, uploads the reports, and commits changed menu-health
 reports to Agent `main` with required co-author trailers.
 
-Manual heartbeat or menu-health runs may override the Agent ref and Homepages
+Manual menu-health runs may override the Agent ref and Homepages
 QA ref. Scheduled runs default the Agent to `main` and use repository variable
 `HOMEPAGES_QA_SOURCE_REF`, falling back to `qa-homepages-v1`.
 
