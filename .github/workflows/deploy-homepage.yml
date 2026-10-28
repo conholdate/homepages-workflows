@@ -341,7 +341,7 @@ jobs:
           # longer each time, with a random spread so parallel deploys part.
           attempts=6
           for attempt in $(seq 1 "$attempts"); do
-            code=$(curl -sS -o /dev/null -w '%{http_code}' -G \
+            code=$(curl -sS --connect-timeout 10 --max-time 60 -o /dev/null -w '%{http_code}' -G \
               -H "X-Api-Key: ${BUNNY_API_KEY}" \
               --data-urlencode "url=${CACHE_URL}" \
               "https://api.dynabic.com/bn/purge?async=true") || true
