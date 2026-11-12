@@ -216,6 +216,7 @@ jobs:
           CACHE_ALIAS: ${{ steps.map.outputs.cache_alias }}
           INVALIDATE_CACHE: ${{ inputs.invalidate_cache }}
           EXPECTED_LIVE_SHA: ${{ inputs.expected_live_sha }}
+          MAX_DELETES: ${{ steps.map.outputs.max_deletes }}
           AWS_DEFAULT_REGION: us-east-1
         run: |
           set -euo pipefail
@@ -254,6 +255,12 @@ jobs:
             exit 1
           fi
 
+          # A bucket shared with another owner's pages deletes nothing (D-136); every other site
+          # removes files its build no longer has.
+          if ! [[ "$MAX_DELETES" =~ ^(-1|0)$ ]]; then
+            echo "::error::Unexpected max deletes from the deployment profile."
+            exit 1
+          fi
           IFS=',' read -ra target_array <<< "$TARGETS"
           # D-067: inside this per-site queue, refuse to overwrite newer work.
           if [ -n "${EXPECTED_LIVE_SHA}" ]; then
@@ -269,7 +276,7 @@ jobs:
             if [ "${{ inputs.reconcile_identity }}" = "true" ]; then
               identity_path="deployment-evidence/reconcile/homepages-deployment.json"
             else
-              hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes -1 --force
+              hugo --config "${{ steps.map.outputs.config }}" deploy --target "$target" --maxDeletes "$MAX_DELETES" --force
             fi
             python ../workflow-support/.github/scripts/publish_deployment_identity.py \
               --config "${{ steps.map.outputs.config }}" \
@@ -339,20 +346,29 @@ jobs:
           # ten parallel publish deploys used all their retries within 12
           # seconds and failed after their files were live. Wait here instead:
           # longer each time, with a random spread so parallel deploys part.
-          attempts=6
-          for attempt in $(seq 1 "$attempts"); do
-            code=$(curl -sS --connect-timeout 10 --max-time 60 -o /dev/null -w '%{http_code}' -G \
-              -H "X-Api-Key: ${BUNNY_API_KEY}" \
-              --data-urlencode "url=${CACHE_URL}" \
-              "https://api.dynabic.com/bn/purge?async=true") || true
-            case "$code" in
-              2??) echo "Bunny purge accepted on attempt ${attempt}."; exit 0 ;;
-              429|5??|000) echo "Bunny purge busy (HTTP ${code}) on attempt ${attempt} of ${attempts}." ;;
-              *) echo "::error::Bunny purge answered HTTP ${code}."; exit 1 ;;
-            esac
-            if [ "$attempt" -lt "$attempts" ]; then
-              sleep $(( attempt * 15 + RANDOM % 15 ))
+          # A site sharing its bucket purges only its own pages, listed comma-separated (D-136).
+          purge() {
+            local url="$1" attempts=6 attempt code
+            for attempt in $(seq 1 "$attempts"); do
+              code=$(curl -sS --connect-timeout 10 --max-time 60 -o /dev/null -w '%{http_code}' -G \
+                -H "X-Api-Key: ${BUNNY_API_KEY}" \
+                --data-urlencode "url=${url}" \
+                "https://api.dynabic.com/bn/purge?async=true") || true
+              case "$code" in
+                2??) echo "Bunny purge of ${url} accepted on attempt ${attempt}."; return 0 ;;
+                429|5??|000) echo "Bunny purge busy (HTTP ${code}) on attempt ${attempt} of ${attempts}." ;;
+                *) echo "::error::Bunny purge answered HTTP ${code}."; return 1 ;;
+              esac
+              if [ "$attempt" -lt "$attempts" ]; then
+                sleep $(( attempt * 15 + RANDOM % 15 ))
+              fi
+            done
+            echo "::error::Bunny purge was still busy after ${attempts} attempts."
+            return 1
+          }
+          IFS=',' read -ra purge_urls <<< "$CACHE_URL"
+          for url in "${purge_urls[@]}"; do
+            if ! purge "$url"; then
+              exit 1
             fi
           done
-          echo "::error::Bunny purge was still busy after ${attempts} attempts."
-          exit 1

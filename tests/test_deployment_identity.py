@@ -239,7 +239,9 @@ class DeploymentIdentityTests(unittest.TestCase):
         self.assertIn("rm -rf public", build)
         self.assertLess(build.index("rm -rf public"), build.index("hugo --config"))
 
-    def _run_purge(self, answers: list[str]) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
+    def _run_purge(
+        self, answers: list[str], cache_url: str = "https://www.example.com/*"
+    ) -> tuple[subprocess.CompletedProcess[str], list[str], list[str]]:
         """Run the workflow's real purge script against a fake curl and sleep."""
 
         workflow = (ROOT / ".github" / "workflows" / "deploy-homepage.yml").read_text(
@@ -269,7 +271,7 @@ class DeploymentIdentityTests(unittest.TestCase):
                     "PATH": f"{bin_dir}{os.pathsep}{os.environ.get('PATH', '')}",
                     "FAKE": str(bin_dir),
                     "BUNNY_API_KEY": "test-key",
-                    "CACHE_URL": "https://www.example.com/*",
+                    "CACHE_URL": cache_url,
                 },
                 capture_output=True,
                 text=True,
@@ -292,6 +294,21 @@ class DeploymentIdentityTests(unittest.TestCase):
             self.assertGreaterEqual(int(seconds), attempt * 15)
             self.assertLess(int(seconds), attempt * 15 + 15)
         self.assertIn("accepted on attempt 4", result.stdout)
+
+    def test_bunny_purge_purges_each_listed_url(self) -> None:
+        # A site sharing its bucket purges only its own home pages, one URL each (D-136).
+        result, calls, _sleeps = self._run_purge(
+            ["200", "200", "200"],
+            cache_url="https://qa.example.info/,https://qa.example.info/de/,https://qa.example.info/ar/",
+        )
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertEqual(3, len(calls))
+        self.assertIn("purge of https://qa.example.info/de/ accepted", result.stdout)
+        stopped, calls, _sleeps = self._run_purge(
+            ["200", "401"], cache_url="https://qa.example.info/,https://qa.example.info/de/,https://qa.example.info/ar/"
+        )
+        self.assertEqual(1, stopped.returncode)
+        self.assertEqual(2, len(calls))
 
     def test_bunny_purge_fails_after_its_attempts_or_on_a_refusal(self) -> None:
         busy, calls, sleeps = self._run_purge(["429"] * 6)
@@ -330,6 +347,7 @@ class DeploymentIdentityTests(unittest.TestCase):
                 "aspose.net",
                 "aspose.org",
                 "aspose.xyz",
+                "aspose.info",
                 "groupdocs.com",
                 "groupdocs.cloud",
                 "groupdocs.app",
@@ -356,7 +374,9 @@ class DeploymentIdentityTests(unittest.TestCase):
                         "ceph_qa" if environment == "qa" else "ceph_production",
                         profile["credential_set"],
                     )
-                    self.assertEqual({"kind": "bunny", "url": f"https://{host}/*"}, profile["cache"])
+                    # A bucket shared with another owner's pages purges only its home pages (D-136).
+                    url = f"https://{host}/" if profile.get("scope") == "home-pages" else f"https://{host}/*"
+                    self.assertEqual({"kind": "bunny", "url": url}, profile["cache"])
 
     def test_deployment_profile_resolves_manifest_config_and_profile_targets(self) -> None:
         manifest = """sites:
