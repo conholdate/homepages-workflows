@@ -69,9 +69,18 @@ def _validate_targets(config_path: Path, targets: list[str]) -> dict[str, dict[s
 
 
 # A site that shares its bucket with another owner's pages (aspose.info, D-136) deploys only its
-# home page in every language, its identity file and its own assets under /homepage/.
+# home page in every language, its identity file and its one assets folder (`params.asset_base`).
 HOME_PAGES_SCOPE = "home-pages"
-_HOME_PAGES_FIXED = ("index.html", ".well-known/homepages-deployment.json", "homepage/**")
+_HOME_PAGES_FIXED = ("index.html", ".well-known/homepages-deployment.json")
+
+
+def _asset_folder(config_path: Path) -> str:
+    data = tomllib.loads(config_path.read_text(encoding="utf-8-sig"))
+    params = data.get("params") if isinstance(data.get("params"), dict) else {}
+    base = str(params.get("asset_base") or "")
+    if not re.fullmatch(r"/[a-z0-9][a-z0-9-]*", base):
+        raise ValueError(f"{config_path.name} needs `params.asset_base`, one folder such as /homepage")
+    return base[1:] + "/**"
 
 
 def _home_page_languages(config_path: Path) -> list[str]:
@@ -94,7 +103,7 @@ def _validate_home_pages_scope(
     """Every target uploads and deletes exactly the home pages; returns the non-default languages."""
 
     codes = _home_page_languages(config_path)
-    expected = set(_HOME_PAGES_FIXED) | {f"{code}/index.html" for code in codes}
+    expected = set(_HOME_PAGES_FIXED) | {_asset_folder(config_path)} | {f"{code}/index.html" for code in codes}
     for target in targets:
         item = configured[target]
         include = str(item.get("include") or "")

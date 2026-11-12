@@ -34,13 +34,14 @@ MANIFEST = """sites:
 HOME_PAGES = "{index.html,de/index.html,ar/index.html,.well-known/homepages-deployment.json,homepage/**}"
 
 
-def _config(include: str | None = HOME_PAGES, extra: str = "") -> str:
+def _config(include: str | None = HOME_PAGES, extra: str = "", asset_base: str = "/homepage") -> str:
     target = '[[deployment.targets]]\nname = "staging_ceph"\nURL = "s3://qa-example-info"\n'
     if include is not None:
         target += f"include = {json.dumps(include)}\n"
     return (
         'defaultContentLanguage = "en"\n'
         "defaultContentLanguageInSubdir = false\n"
+        f"[params]\nasset_base = {json.dumps(asset_base)}\n"
         "[languages.en]\nweight = 1\n[languages.de]\nweight = 2\n[languages.ar]\nweight = 3\n"
         "[deployment]\n" + target + extra
     )
@@ -96,6 +97,15 @@ class SharedBucketScopeTests(unittest.TestCase):
                     self._resolve(_config(include=include), _profiles())
         with self.assertRaisesRegex(ValueError, "include"):
             self._resolve(_config(extra='exclude = "x"\n'), _profiles())
+
+    def test_assets_folder_comes_from_the_site_config(self) -> None:
+        include = HOME_PAGES.replace("homepage/**", "home-assets/**")
+        self.assertEqual("0", self._resolve(_config(include=include, asset_base="/home-assets"), _profiles())["max_deletes"])
+        with self.assertRaisesRegex(ValueError, "include"):
+            self._resolve(_config(asset_base="/home-assets"), _profiles())
+        for bad in ("", "/", "/a/b", "homepage", "/../x"):
+            with self.subTest(asset_base=bad), self.assertRaisesRegex(ValueError, "asset_base"):
+                self._resolve(_config(asset_base=bad), _profiles())
 
     def test_scope_refuses_wildcard_purge_and_unknown_scope(self) -> None:
         with self.assertRaisesRegex(ValueError, "Bunny site root"):
