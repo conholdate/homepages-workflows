@@ -113,6 +113,20 @@
         "cache": {"kind": "bunny", "url": "https://www.aspose.org/*"}
       }
     },
+    "aspose.info": {
+      "qa": {
+        "credential_set": "ceph_qa",
+        "targets": ["staging_ceph"],
+        "scope": "home-pages",
+        "cache": {"kind": "bunny", "url": "https://qa.aspose.info/"}
+      },
+      "production": {
+        "credential_set": "ceph_production",
+        "targets": ["production_ceph"],
+        "scope": "home-pages",
+        "cache": {"kind": "bunny", "url": "https://www.aspose.info/"}
+      }
+    },
     "aspose.xyz": {
       "qa": {
         "credential_set": "ceph_qa",
